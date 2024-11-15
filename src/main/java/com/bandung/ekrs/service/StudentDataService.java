@@ -2,17 +2,16 @@ package com.bandung.ekrs.service;
 
 import com.bandung.ekrs.dto.response.*;
 import com.bandung.ekrs.model.*;
-import com.bandung.ekrs.repository.AccountRepository;
-import com.bandung.ekrs.repository.CourseRepository;
-import com.bandung.ekrs.repository.EnrollmentRepository;
-import com.bandung.ekrs.repository.SemesterRepository;
-import com.bandung.ekrs.repository.StudentProfileRepository;
+import com.bandung.ekrs.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +21,8 @@ public class StudentDataService {
     private final SemesterRepository semesterRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
+    private final CoursePrerequisiteRepository coursePrerequisiteRepository;
+    private final GradeRepository gradeRepository;
 
     public StudentDataResponse getCurrentStudentData(String username) {
         Account account = accountRepository.findByUsername(username)
@@ -151,6 +152,7 @@ public class StudentDataService {
                 .map(enrollment -> {
                     Course course = enrollment.getCourse();
                     return EnrolledCourseResponse.builder()
+                            .courseId(course.getId())
                             .courseCode(course.getCourseCode())
                             .courseName(course.getCourseName())
                             .creditPoints(course.getCreditPoints())
@@ -221,6 +223,9 @@ public class StudentDataService {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new RuntimeException("Course not found"));
 
+        // Check prerequisites
+        checkPrerequisites(student, course);
+
         // Check if already enrolled
         if (enrollmentRepository.existsByStudentStudentIdAndCourseIdAndSemesterId(
                 student.getStudentId(), courseId, currentSemester.getId())) {
@@ -258,6 +263,65 @@ public class StudentDataService {
                 .creditPoints(course.getCreditPoints())
                 .remainingCredits(remainingCredits)
                 .build();
+    }
+
+    private void checkPrerequisites(StudentProfile student, Course course) {
+        List<CoursePrerequisite> prerequisites = coursePrerequisiteRepository.findByCourseId(course.getId());
+        
+        if (!prerequisites.isEmpty()) {
+            for (CoursePrerequisite prerequisite : prerequisites) {
+                // Find the student's grades for the prerequisite course
+                List<Grade> grades = gradeRepository.findByEnrollmentStudentAndEnrollmentCourse(
+                    student, 
+                    prerequisite.getPrerequisiteCourse()
+                );
+
+                // Get the latest grade (first in the list since we ordered by ID DESC)
+                Optional<Grade> latestGrade = grades.stream().findFirst();
+
+                // If mandatory prerequisite
+                if ("Mandatory".equals(prerequisite.getConditionType())) {
+                    if (latestGrade.isEmpty()) {
+                        throw new RuntimeException(String.format(
+                            "Prerequisite course %s must be completed before enrolling in %s",
+                            prerequisite.getPrerequisiteCourse().getCourseCode(),
+                            course.getCourseCode()
+                        ));
+                    }
+
+                    String studentGrade = latestGrade.get().getGrade();
+                    String requiredGrade = prerequisite.getRequiredGrade();
+
+                    if (!isGradeSufficient(studentGrade, requiredGrade)) {
+                        throw new RuntimeException(String.format(
+                            "Minimum grade of %s required in %s, but achieved grade was %s",
+                            requiredGrade,
+                            prerequisite.getPrerequisiteCourse().getCourseCode(),
+                            studentGrade
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isGradeSufficient(String achievedGrade, String requiredGrade) {
+        Map<String, Integer> gradeValues = new HashMap<>();
+        gradeValues.put("A", 5);
+        gradeValues.put("B", 4);
+        gradeValues.put("C", 3);
+        gradeValues.put("D", 2);
+        gradeValues.put("E", 1);
+        gradeValues.put("F", 0);
+
+        Integer achievedValue = gradeValues.get(achievedGrade.toUpperCase());
+        Integer requiredValue = gradeValues.get(requiredGrade.toUpperCase());
+
+        if (achievedValue == null || requiredValue == null) {
+            throw new RuntimeException("Invalid grade format");
+        }
+
+        return achievedValue >= requiredValue;
     }
 
     @Transactional

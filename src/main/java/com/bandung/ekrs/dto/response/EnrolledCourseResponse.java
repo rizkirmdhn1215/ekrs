@@ -12,6 +12,7 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EnrolledCourseResponse {
+    private Integer courseId;
     private String courseCode;
     private String courseName;
     private Integer creditPoints;
