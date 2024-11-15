@@ -42,4 +42,7 @@ public class Course {
 
     @OneToMany(mappedBy = "course")
     private Set<CoursePrerequisite> prerequisites;
+
+    @Column(length = 100)
+    private String location;
 } 

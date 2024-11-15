@@ -4,36 +4,34 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.Builder;
 
 @Entity
 @Table(name = "student_profile")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class StudentProfile {
     @Id
-    @Column(name = "student_id")
-    private Integer studentId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
-    @OneToOne
-    @MapsId
-    @JoinColumn(name = "student_id")
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
-    @Column(name = "first_name", nullable = false, length = 50)
-    private String firstName;
+    @Column(name = "student_number", nullable = false, unique = true)
+    private String studentNumber;
 
-    @Column(name = "last_name", nullable = false, length = 50)
-    private String lastName;
+    @Column(name = "full_name", nullable = false)
+    private String fullName;
 
-    @Column(name = "enrollment_year", nullable = false)
-    private Integer enrollmentYear;
+    // New field: supervisor relationship
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supervisor_id")
+    private LecturerProfile supervisor;
 
-    private String address;
-
-    @Column(name = "image_url")
-    private String imageUrl;
-
-    @Column(length = 15)
-    private String npm;
+    @Column(name = "credit_limit")
+    private Integer creditLimit;
 } 
