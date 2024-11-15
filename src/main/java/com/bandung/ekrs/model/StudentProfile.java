@@ -1,5 +1,6 @@
 package com.bandung.ekrs.model;
 
+import com.bandung.ekrs.model.enums.StudentStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -27,11 +28,14 @@ public class StudentProfile {
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
-    // New field: supervisor relationship
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supervisor_id")
     private LecturerProfile supervisor;
 
     @Column(name = "credit_limit")
     private Integer creditLimit;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", columnDefinition = "student_status default 'PENDING'")
+    private StudentStatus status;
 } 
