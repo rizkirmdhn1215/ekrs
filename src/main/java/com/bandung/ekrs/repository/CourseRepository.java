@@ -33,4 +33,9 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
     // Changed from findByLecturerId to use the correct path through the lecturer entity
     @Query("SELECT c FROM Course c WHERE c.lecturer.lecturerId = :lecturerId")
     List<Course> findByLecturerId(@Param("lecturerId") Integer lecturerId);
+    
+    @Query("SELECT c FROM Course c WHERE c.id NOT IN " +
+           "(SELECT e.course.id FROM Enrollment e WHERE e.student.studentId = :studentId AND e.semester.id = :semesterId)")
+    List<Course> findCoursesNotEnrolledByStudent(@Param("studentId") Integer studentId, 
+                                                @Param("semesterId") Integer semesterId);
 } 

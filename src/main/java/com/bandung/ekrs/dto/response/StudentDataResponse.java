@@ -13,6 +13,7 @@ public class StudentDataResponse {
     private String npm;
     private String enrollmentYear;
     private Integer creditLimit;
+    private Integer creditLeft;
     private SupervisorResponse supervisor;
     private StudentStatus status;
     private String address;
