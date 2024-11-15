@@ -15,18 +15,16 @@ import lombok.Builder;
 @Builder
 public class StudentProfile {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    @Column(name = "student_id")
+    private Integer studentId;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "account_id", nullable = false)
+    @OneToOne
+    @MapsId
+    @JoinColumn(name = "student_id")
     private Account account;
 
-    @Column(name = "student_number", nullable = false, unique = true)
-    private String studentNumber;
-
-    @Column(name = "full_name", nullable = false)
-    private String fullName;
+    @Column(name = "enrollment_year")
+    private Integer enrollmentYear;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supervisor_id")
@@ -36,6 +34,29 @@ public class StudentProfile {
     private Integer creditLimit;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", columnDefinition = "student_status default 'PENDING'")
+    @Column(name = "status", columnDefinition = "VARCHAR(255)")
     private StudentStatus status;
+
+    @Column(name = "image_url", length = 255)
+    private String imageUrl;
+
+    @Column(name = "first_name", length = 50, nullable = false)
+    private String firstName;
+
+    @Column(name = "last_name", length = 50)
+    private String lastName;
+
+    @Column(name = "npm", length = 15)
+    private String npm;
+
+    @Column(name = "address", columnDefinition = "text")
+    private String address;
+
+    // Utility method to get full name
+    public String getFullName() {
+        if (lastName != null && !lastName.isEmpty()) {
+            return firstName + " " + lastName;
+        }
+        return firstName;
+    }
 } 
