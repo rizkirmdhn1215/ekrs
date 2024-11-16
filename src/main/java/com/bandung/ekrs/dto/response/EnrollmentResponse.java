@@ -15,4 +15,5 @@ public class EnrollmentResponse {
     private String courseName;
     private Integer creditPoints;
     private Integer remainingCredits;
+    private String lecturerName;
 } 

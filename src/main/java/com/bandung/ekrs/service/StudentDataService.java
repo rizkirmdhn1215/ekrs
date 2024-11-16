@@ -164,6 +164,8 @@ public class StudentDataService {
                             .courseName(course.getCourseName())
                             .creditPoints(course.getCreditPoints())
                             .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
+                            .lecturerName(course.getLecturer() != null ? 
+                                    course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
                             .scheduleTime(course.getScheduleTime())
                             .scheduleDay(course.getScheduleDay())
                             .location(course.getLocation())
@@ -306,12 +308,18 @@ public class StudentDataService {
         // Calculate remaining credits
         int remainingCredits = student.getCreditLimit() - (currentEnrolledCredits + course.getCreditPoints());
 
+        // Get lecturer name
+        String lecturerName = course.getLecturer() != null ? 
+                course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : 
+                null;
+
         return EnrollmentResponse.builder()
                 .message("Successfully enrolled in course")
                 .courseCode(course.getCourseCode())
                 .courseName(course.getCourseName())
                 .creditPoints(course.getCreditPoints())
                 .remainingCredits(remainingCredits)
+                .lecturerName(lecturerName)
                 .build();
     }
 

@@ -17,6 +17,7 @@ public class EnrolledCourseResponse {
     private String courseName;
     private Integer creditPoints;
     private Integer lecturerId;
+    private String lecturerName;
     private LocalTime scheduleTime;
     private String scheduleDay;
     private String location;
