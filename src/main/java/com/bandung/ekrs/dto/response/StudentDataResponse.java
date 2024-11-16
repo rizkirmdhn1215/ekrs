@@ -18,5 +18,7 @@ public class StudentDataResponse {
     private StudentStatus status;
     private String address;
     private String imageUrl;
+    private Integer departmentId;
+    private String departmentName;
     private SemesterResponse currentSemester;
 }

@@ -52,6 +52,10 @@ public class StudentProfile {
     @Column(name = "address", columnDefinition = "text")
     private String address;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
+
     // Utility method to get full name
     public String getFullName() {
         if (lastName != null && !lastName.isEmpty()) {

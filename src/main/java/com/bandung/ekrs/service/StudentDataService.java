@@ -69,6 +69,8 @@ public class StudentDataService {
                 .status(student.getStatus())
                 .address(student.getAddress())
                 .imageUrl(student.getImageUrl())
+                .departmentId(student.getDepartment() != null ? student.getDepartment().getId() : null)
+                .departmentName(student.getDepartment() != null ? student.getDepartment().getName() : null)
                 .currentSemester(SemesterResponse.builder()
                         .name(currentSemester.getName())
                         .startDate(currentSemester.getStartDate().toString())
@@ -124,6 +126,8 @@ public class StudentDataService {
                 .status(student.getStatus())
                 .address(student.getAddress())
                 .imageUrl(student.getImageUrl())
+                .departmentId(student.getDepartment() != null ? student.getDepartment().getId() : null)
+                .departmentName(student.getDepartment() != null ? student.getDepartment().getName() : null)
                 .currentSemester(SemesterResponse.builder()
                         .name(currentSemester.getName())
                         .startDate(currentSemester.getStartDate().toString())
@@ -151,6 +155,9 @@ public class StudentDataService {
                 .stream()
                 .map(enrollment -> {
                     Course course = enrollment.getCourse();
+                    Integer currentEnrollment = enrollmentRepository
+                            .countByCourseIdAndSemesterId(course.getId(), currentSemester.getId());
+                    
                     return EnrolledCourseResponse.builder()
                             .courseId(course.getId())
                             .courseCode(course.getCourseCode())
@@ -160,6 +167,8 @@ public class StudentDataService {
                             .scheduleTime(course.getScheduleTime())
                             .scheduleDay(course.getScheduleDay())
                             .location(course.getLocation())
+                            .maxStudents(course.getMaxStudents())
+                            .currentEnrollment(currentEnrollment)
                             .build();
                 })
                 .toList();
@@ -177,27 +186,53 @@ public class StudentDataService {
         StudentProfile student = studentProfileRepository.findByAccount(account)
                 .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
+        // Check if student has a department
+        if (student.getDepartment() == null) {
+            throw new RuntimeException("Student is not assigned to any department");
+        }
+
         // Get current semester
         Semester currentSemester = semesterRepository
                 .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
                 .orElseThrow(() -> new RuntimeException("Current semester not found"));
 
-        // Get all courses not enrolled by the student
-        List<AvailableCourseResponse> availableCourses = courseRepository
-                .findCoursesNotEnrolledByStudent(student.getStudentId(), currentSemester.getId())
-                .stream()
-                .map(course -> AvailableCourseResponse.builder()
-                        .courseId(course.getId())
-                        .courseCode(course.getCourseCode())
-                        .courseName(course.getCourseName())
-                        .creditPoints(course.getCreditPoints())
-                        .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
-                        .lecturerName(course.getLecturer() != null ? 
-                                course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
-                        .scheduleTime(course.getScheduleTime())
-                        .scheduleDay(course.getScheduleDay())
-                        .location(course.getLocation())
-                        .build())
+        // Get all courses not enrolled by the student AND (in the same department OR with null department)
+        List<Course> courses = courseRepository.findCoursesNotEnrolledByStudentAndDepartment(
+            student.getStudentId(), 
+            currentSemester.getId(),
+            student.getDepartment().getId()
+        );
+
+        // Debug log
+        System.out.println("Found " + courses.size() + " available courses");
+        courses.forEach(course -> {
+            System.out.println("Course: " + course.getCourseCode() + 
+                             ", Department: " + (course.getDepartment() == null ? "NULL" : course.getDepartment().getId()));
+        });
+
+        List<AvailableCourseResponse> availableCourses = courses.stream()
+                .map(course -> {
+                    Integer currentEnrollment = enrollmentRepository
+                            .countByCourseIdAndSemesterId(course.getId(), currentSemester.getId());
+                    
+                    return AvailableCourseResponse.builder()
+                            .courseId(course.getId())
+                            .courseCode(course.getCourseCode())
+                            .courseName(course.getCourseName())
+                            .creditPoints(course.getCreditPoints())
+                            .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
+                            .lecturerName(course.getLecturer() != null ? 
+                                    course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
+                            .scheduleTime(course.getScheduleTime())
+                            .scheduleDay(course.getScheduleDay())
+                            .location(course.getLocation())
+                            .departmentId(course.getDepartment() != null ? course.getDepartment().getId() : null)
+                            .departmentName(course.getDepartment() != null ? course.getDepartment().getName() : "General Course")
+                            .maxStudents(course.getMaxStudents())
+                            .currentEnrollment(currentEnrollment)
+                            .isFull(currentEnrollment >= course.getMaxStudents())
+                            .build();
+                })
                 .toList();
 
         return AvailableCoursesWrapper.builder()
@@ -223,6 +258,13 @@ public class StudentDataService {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new RuntimeException("Course not found"));
 
+        // Check department access
+        if (course.getDepartment() != null && 
+            (student.getDepartment() == null || 
+             !student.getDepartment().getId().equals(course.getDepartment().getId()))) {
+            throw new RuntimeException("You cannot enroll in courses from other departments");
+        }
+
         // Check prerequisites
         checkPrerequisites(student, course);
 
@@ -242,6 +284,14 @@ public class StudentDataService {
         // Check if enrolling would exceed credit limit
         if (currentEnrolledCredits + course.getCreditPoints() > student.getCreditLimit()) {
             throw new RuntimeException("Enrolling in this course would exceed your credit limit");
+        }
+
+        // Add check for course capacity
+        Integer currentEnrollment = enrollmentRepository
+                .countByCourseIdAndSemesterId(courseId, currentSemester.getId());
+        
+        if (currentEnrollment >= course.getMaxStudents()) {
+            throw new RuntimeException("Course has reached maximum capacity");
         }
 
         // Create new enrollment

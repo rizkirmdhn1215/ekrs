@@ -20,4 +20,6 @@ public class EnrolledCourseResponse {
     private LocalTime scheduleTime;
     private String scheduleDay;
     private String location;
+    private Integer maxStudents;
+    private Integer currentEnrollment;
 } 

@@ -43,4 +43,11 @@ public class Course {
 
     @Column(name = "location")
     private String location;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
+
+    @Column(name = "max_students", nullable = false)
+    private Integer maxStudents;
 } 

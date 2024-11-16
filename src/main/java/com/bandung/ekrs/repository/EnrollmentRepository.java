@@ -2,6 +2,8 @@ package com.bandung.ekrs.repository;
 
 import com.bandung.ekrs.model.Enrollment;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -18,4 +20,7 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
         Integer courseId, 
         Integer semesterId
     );
+
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId AND e.semester.id = :semesterId")
+    Integer countByCourseIdAndSemesterId(@Param("courseId") Integer courseId, @Param("semesterId") Integer semesterId);
 } 

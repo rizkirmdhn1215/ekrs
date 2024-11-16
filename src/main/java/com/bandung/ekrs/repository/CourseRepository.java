@@ -38,4 +38,24 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
            "(SELECT e.course.id FROM Enrollment e WHERE e.student.studentId = :studentId AND e.semester.id = :semesterId)")
     List<Course> findCoursesNotEnrolledByStudent(@Param("studentId") Integer studentId, 
                                                 @Param("semesterId") Integer semesterId);
+    
+    // Add department-related queries
+    List<Course> findByDepartmentId(Integer departmentId);
+    
+
+    // Optional: Find courses by department and year
+    List<Course> findByDepartmentIdAndYearOffered(Integer departmentId, Integer yearOffered);
+
+    @Query("SELECT DISTINCT c FROM Course c " +
+           "WHERE (c.department IS NULL OR c.department.id = :departmentId) " +
+           "AND c.id NOT IN (" +
+           "    SELECT e.course.id FROM Enrollment e " +
+           "    WHERE e.student.studentId = :studentId " +
+           "    AND e.semester.id = :semesterId" +
+           ") " +
+           "ORDER BY c.courseCode")
+    List<Course> findCoursesNotEnrolledByStudentAndDepartment(
+            @Param("studentId") Integer studentId,
+            @Param("semesterId") Integer semesterId,
+            @Param("departmentId") Integer departmentId);
 } 

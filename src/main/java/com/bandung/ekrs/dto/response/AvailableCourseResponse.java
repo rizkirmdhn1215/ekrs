@@ -21,4 +21,9 @@ public class AvailableCourseResponse {
     private LocalTime scheduleTime;
     private String scheduleDay;
     private String location;
+    private Integer departmentId;
+    private String departmentName;
+    private Integer maxStudents;
+    private Integer currentEnrollment;
+    private Boolean isFull;
 } 
