@@ -14,7 +14,7 @@ public class KhsController {
     private final KhsService khsService;
 
     @GetMapping("/semester")
-    public ResponseEntity<KhsResponse> getKhsBySemester(@RequestParam String semester) {
+    public ResponseEntity<KhsResponse> getKhsBySemester(@RequestParam Integer semester) {
         KhsResponse response = khsService.getKhsBySemester(semester);
         return ResponseEntity.status(response.getStatusCode()).body(response);
     }
