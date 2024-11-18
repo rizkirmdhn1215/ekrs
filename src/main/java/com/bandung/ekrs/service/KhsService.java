@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 public class KhsService {
     private final KhsRepository khsRepository;
 
-    public KhsResponse getKhsBySemester(String semester) {
+    public KhsResponse getKhsBySemester(Integer semester) {
         try {
             String username = SecurityContextHolder.getContext().getAuthentication().getName();
             List<Grade> grades = khsRepository.findBySemesterAndUsername(semester, username);
