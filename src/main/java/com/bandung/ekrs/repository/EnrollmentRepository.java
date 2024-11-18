@@ -21,6 +21,12 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
         Integer semesterId
     );
 
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId")
+    Integer countByCourseId(@Param("courseId") Integer courseId);
+
     @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId AND e.semester.id = :semesterId")
-    Integer countByCourseIdAndSemesterId(@Param("courseId") Integer courseId, @Param("semesterId") Integer semesterId);
+    Integer countByCourseIdAndSemesterId(
+        @Param("courseId") Integer courseId,
+        @Param("semesterId") Integer semesterId
+    );
 } 

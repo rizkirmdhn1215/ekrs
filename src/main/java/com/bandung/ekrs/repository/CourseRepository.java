@@ -58,4 +58,6 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
             @Param("studentId") Integer studentId,
             @Param("semesterId") Integer semesterId,
             @Param("departmentId") Integer departmentId);
+
+    List<Course> findByDepartmentIsNull();
 } 
