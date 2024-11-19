@@ -6,6 +6,7 @@ import com.bandung.ekrs.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -23,6 +24,7 @@ public class StudentDataService {
     private final CourseRepository courseRepository;
     private final CoursePrerequisiteRepository coursePrerequisiteRepository;
     private final GradeRepository gradeRepository;
+    private final MinioService minioService;
 
     public StudentDataResponse getCurrentStudentData(String username) {
         Account account = accountRepository.findByUsername(username)
@@ -31,13 +33,23 @@ public class StudentDataService {
         StudentProfile student = studentProfileRepository.findByAccount(account)
                 .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
-        Semester currentSemester = semesterRepository
+        // Get image URL (will return default image URL if no image exists)
+        String imageUrl = student.getImageUrl();
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            imageUrl = minioService.getImageUrl("sukvi");
+        }
+
+        // Calculate current semester based on enrollment year
+        int currentSemester = calculateCurrentSemester(student.getEnrollmentYear());
+        
+        // Get current semester from repository
+        Semester currentSemesterObj = semesterRepository
                 .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
                 .orElseThrow(() -> new RuntimeException("Current semester not found"));
 
         // Calculate total enrolled credits for current semester
         int totalEnrolledCredits = enrollmentRepository
-                .findByStudentStudentIdAndSemesterId(student.getStudentId(), currentSemester.getId())
+                .findByStudentStudentIdAndSemesterId(student.getStudentId(), currentSemesterObj.getId())
                 .stream()
                 .mapToInt(enrollment -> enrollment.getCourse().getCreditPoints())
                 .sum();
@@ -68,15 +80,33 @@ public class StudentDataService {
                 .supervisor(supervisorResponse)
                 .status(student.getStatus())
                 .address(student.getAddress())
-                .imageUrl(student.getImageUrl())
+                .imageUrl(imageUrl)
                 .departmentId(student.getDepartment() != null ? student.getDepartment().getId() : null)
                 .departmentName(student.getDepartment() != null ? student.getDepartment().getName() : null)
+                .currentSemesterNumber(currentSemester)
                 .currentSemester(SemesterResponse.builder()
-                        .name(currentSemester.getName())
-                        .startDate(currentSemester.getStartDate().toString())
-                        .endDate(currentSemester.getEndDate().toString())
+                        .name("Semester " + currentSemester)
+                        .startDate(currentSemesterObj.getStartDate().toString())
+                        .endDate(currentSemesterObj.getEndDate().toString())
                         .build())
                 .build();
+    }
+
+    private int calculateCurrentSemester(Integer enrollmentYear) {
+        LocalDate now = LocalDate.now();
+        LocalDate enrollmentDate = LocalDate.of(enrollmentYear, 1, 1);
+        
+        // Calculate years difference
+        int yearsDiff = now.getYear() - enrollmentDate.getYear();
+        
+        // Calculate which semester in current year (1 or 2)
+        int currentYearSemester = now.getMonthValue() <= 6 ? 1 : 2;
+        
+        // Calculate total semesters
+        // Each year has 2 semesters, then add current year's semester
+        int totalSemesters = (yearsDiff * 2) + currentYearSemester;
+        
+        return totalSemesters;
     }
 
     public StudentProfile findByNpm(String npm) {
@@ -427,5 +457,40 @@ public class StudentDataService {
                 .creditPoints(course.getCreditPoints())
                 .updatedCreditLeft(updatedCreditLeft)
                 .build();
+    }
+
+    public void updateProfileImage(String username, MultipartFile image) {
+        try {
+            Account account = accountRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            StudentProfile student = studentProfileRepository.findByAccount(account)
+                    .orElseThrow(() -> new RuntimeException("Student profile not found"));
+
+            // Generate unique filename
+            String fileName = String.format("student_%d_%d_%s",
+                    student.getStudentId(),
+                    System.currentTimeMillis(),
+                    image.getOriginalFilename());
+
+            // Upload to MinIO and get the URL
+            String imageUrl = minioService.uploadImage(image, fileName);
+
+            // Delete old image if exists (and is not the default image)
+            if (student.getImageUrl() != null) {
+                String oldFileName = extractFileNameFromUrl(student.getImageUrl());
+                minioService.deleteImage(oldFileName);
+            }
+
+            // Update student profile with new image URL
+            student.setImageUrl(imageUrl);
+            studentProfileRepository.save(student);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update profile image", e);
+        }
+    }
+
+    private String extractFileNameFromUrl(String url) {
+        return url.substring(url.lastIndexOf('/') + 1);
     }
 } 

@@ -20,5 +20,6 @@ public class StudentDataResponse {
     private String imageUrl;
     private Integer departmentId;
     private String departmentName;
+    private Integer currentSemesterNumber;
     private SemesterResponse currentSemester;
 }
