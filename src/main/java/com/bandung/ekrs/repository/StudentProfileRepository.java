@@ -4,6 +4,7 @@ import com.bandung.ekrs.model.Account;
 import com.bandung.ekrs.model.StudentProfile;
 import com.bandung.ekrs.model.enums.StudentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,4 +30,8 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
     // Optional: Count students by department
     @Query("SELECT COUNT(sp) FROM StudentProfile sp WHERE sp.department.id = :departmentId")
     Long countByDepartmentId(@Param("departmentId") Integer departmentId);
+
+    @Modifying
+    @Query("UPDATE StudentProfile sp SET sp.imageUrl = :imageUrl WHERE sp.studentId = :studentId")
+    void updateImageUrl(@Param("studentId") Integer studentId, @Param("imageUrl") String imageUrl);
 } 

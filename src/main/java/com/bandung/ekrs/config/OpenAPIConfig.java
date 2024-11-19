@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
@@ -20,25 +23,26 @@ public class OpenAPIConfig {
     @Value("${server.port}")
     private String serverPort;
 
-    private SecurityScheme createAPIKeyScheme() {
-        return new SecurityScheme()
-                .type(SecurityScheme.Type.HTTP)
-                .bearerFormat("JWT")
-                .scheme("bearer");
-    }
-
     @Bean
     public OpenAPI openAPI() {
-        Server localServer = new Server()
-                .url("http://localhost:" + serverPort)
-                .description("Local Development Server");
+        List<Server> servers = new ArrayList<>();
+        
+        servers.add(new Server()
+            .url("http://10.10.20.13:" + serverPort)
+            .description("Development Server"));
+
+        SecurityScheme securityScheme = new SecurityScheme()
+                .type(SecurityScheme.Type.HTTP)
+                .scheme("bearer")
+                .bearerFormat("JWT");
 
         return new OpenAPI()
-                .servers(List.of(localServer))
-                .addSecurityItem(new SecurityRequirement().addList("Bearer Authentication"))
-                .components(new Components().addSecuritySchemes("Bearer Authentication", createAPIKeyScheme()))
+                .servers(servers)
+                .components(new Components()
+                        .addSecuritySchemes("bearerAuth", securityScheme))
+                .security(List.of(new SecurityRequirement().addList("bearerAuth")))
                 .info(new Info()
-                        .title("E-KRS Project Magang")
+                        .title("E-KRS API Documentation")
                         .description("API Documentation for E-KRS System")
                         .version("1.0.0")
                         .contact(new Contact()

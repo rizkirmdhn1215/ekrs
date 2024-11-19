@@ -4,6 +4,7 @@ import com.bandung.ekrs.dto.response.*;
 import com.bandung.ekrs.model.*;
 import com.bandung.ekrs.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +15,7 @@ import java.util.Optional;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StudentDataService {
@@ -34,9 +36,13 @@ public class StudentDataService {
                 .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
         // Get image URL (will return default image URL if no image exists)
-        String imageUrl = student.getImageUrl();
-        if (imageUrl == null || imageUrl.isEmpty()) {
-            imageUrl = minioService.getImageUrl("sukvi");
+        String imageUrl;
+        if (student.getImageUrl() != null && !student.getImageUrl().isEmpty()) {
+            // Get presigned URL for existing image
+            imageUrl = minioService.getImageUrl(extractFileNameFromUrl(student.getImageUrl()));
+        } else {
+            // Get presigned URL for default image
+            imageUrl = minioService.getImageUrl("sukvi.jpeg");
         }
 
         // Calculate current semester based on enrollment year
@@ -118,6 +124,14 @@ public class StudentDataService {
         StudentProfile student = studentProfileRepository.findByNpm(npm)
                 .orElseThrow(() -> new RuntimeException("Student not found with NPM: " + npm));
 
+        // Get image URL (will return default image URL if no image exists)
+        String imageUrl;
+        if (student.getImageUrl() != null && !student.getImageUrl().isEmpty()) {
+            imageUrl = minioService.getImageUrl(extractFileNameFromUrl(student.getImageUrl()));
+        } else {
+            imageUrl = minioService.getImageUrl("sukvi.jpeg");
+        }
+
         Semester currentSemester = semesterRepository
                 .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
                 .orElseThrow(() -> new RuntimeException("Current semester not found"));
@@ -155,7 +169,7 @@ public class StudentDataService {
                 .supervisor(supervisorResponse)
                 .status(student.getStatus())
                 .address(student.getAddress())
-                .imageUrl(student.getImageUrl())
+                .imageUrl(imageUrl)
                 .departmentId(student.getDepartment() != null ? student.getDepartment().getId() : null)
                 .departmentName(student.getDepartment() != null ? student.getDepartment().getName() : null)
                 .currentSemester(SemesterResponse.builder()
@@ -459,11 +473,14 @@ public class StudentDataService {
                 .build();
     }
 
+    @Transactional
     public void updateProfileImage(String username, MultipartFile image) {
         try {
+            // Get current user's account
             Account account = accountRepository.findByUsername(username)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
+            // Get current user's student profile
             StudentProfile student = studentProfileRepository.findByAccount(account)
                     .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
@@ -473,24 +490,28 @@ public class StudentDataService {
                     System.currentTimeMillis(),
                     image.getOriginalFilename());
 
-            // Upload to MinIO and get the URL
-            String imageUrl = minioService.uploadImage(image, fileName);
+            // Upload new image to MinIO
+            minioService.uploadImage(image, fileName);
 
-            // Delete old image if exists (and is not the default image)
+            // Delete old image if exists (but don't delete default image)
             if (student.getImageUrl() != null) {
                 String oldFileName = extractFileNameFromUrl(student.getImageUrl());
-                minioService.deleteImage(oldFileName);
+                if (!oldFileName.equals("sukvi.jpeg")) {
+                    minioService.deleteImage(oldFileName);
+                }
             }
 
-            // Update student profile with new image URL
-            student.setImageUrl(imageUrl);
-            studentProfileRepository.save(student);
+            // Update only the image URL using a custom query
+            studentProfileRepository.updateImageUrl(student.getStudentId(), fileName);
         } catch (Exception e) {
+            log.error("Error updating profile image", e);
             throw new RuntimeException("Failed to update profile image", e);
         }
     }
 
     private String extractFileNameFromUrl(String url) {
-        return url.substring(url.lastIndexOf('/') + 1);
+        // If the URL contains a query string, remove it
+        String path = url.split("\\?")[0];
+        return path.substring(path.lastIndexOf('/') + 1);
     }
 } 

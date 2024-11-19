@@ -23,6 +23,9 @@ public class MinioService {
     @Value("${minio.default.image:sukvi}")
     private String defaultImageName;
 
+    @Value("${minio.endpoint}")
+    private String endpoint;
+
     public String uploadImage(MultipartFile file, String fileName) {
         try {
             ensureBucketExists();
@@ -70,14 +73,7 @@ public class MinioService {
     }
 
     public String getImageUrl(String fileName) {
-        try {
-            boolean objectExists = objectExists(fileName);
-            String actualFileName = objectExists ? fileName : defaultImageName;
-            return getPresignedUrl(actualFileName);
-        } catch (Exception e) {
-            log.error("Error getting image URL", e);
-            return getPresignedUrl(defaultImageName);
-        }
+        return String.format("%s/%s/%s", endpoint, bucketName, fileName);
     }
 
     public void deleteImage(String fileName) {

@@ -30,14 +30,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
-        final String authHeader = request.getHeader("Authorization");
+        // Add CORS headers
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        response.setHeader("Access-Control-Allow-Headers", "*");
         
-        // Skip filter for auth endpoints
-        if (request.getServletPath().contains("/api/auth")) {
+        if (request.getMethod().equals("OPTIONS")) {
+            response.setStatus(HttpServletResponse.SC_OK);
+            return;
+        }
+
+        // Skip authentication for Swagger UI and API docs
+        if (request.getRequestURI().contains("/swagger-ui") || 
+            request.getRequestURI().contains("/v3/api-docs") ||
+            request.getRequestURI().contains("/api/auth")) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        final String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;

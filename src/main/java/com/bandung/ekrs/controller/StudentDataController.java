@@ -22,7 +22,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.RequestMethod;
 
 @RestController
 @RequestMapping("/krs")
@@ -193,5 +198,57 @@ public class StudentDataController {
             @PathVariable Integer courseId) {
         String username = authentication.getName();
         return ResponseEntity.ok(studentDataService.unenrollCourse(username, courseId));
+    }
+
+    @PostMapping(value = "/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+        summary = "Update profile image",
+        description = "Updates the profile image of the currently logged-in student"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Successfully updated profile image"
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid image file",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Unauthorized - User not authenticated",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Student profile not found",
+            content = @Content
+        )
+    })
+    public ResponseEntity<String> updateProfileImage(
+            Authentication authentication,
+            @RequestParam("image") MultipartFile image) {
+        try {
+            if (image.isEmpty()) {
+                return ResponseEntity.badRequest().body("Please select an image file");
+            }
+
+            // Check file type
+            String contentType = image.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                return ResponseEntity.badRequest().body("File must be an image");
+            }
+
+            // Check file size (e.g., 5MB limit)
+            if (image.getSize() > 5 * 1024 * 1024) {
+                return ResponseEntity.badRequest().body("File size must be less than 5MB");
+            }
+
+            studentDataService.updateProfileImage(authentication.getName(), image);
+            return ResponseEntity.ok("Profile image updated successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Failed to update profile image: " + e.getMessage());
+        }
     }
 } 
