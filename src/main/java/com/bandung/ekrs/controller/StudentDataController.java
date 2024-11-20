@@ -1,6 +1,8 @@
 package com.bandung.ekrs.controller;
 
 import com.bandung.ekrs.dto.request.EnrollCourseRequest;
+import com.bandung.ekrs.dto.request.UpdateStudentDataRequest;
+import com.bandung.ekrs.dto.request.UpdatePasswordRequest;
 import com.bandung.ekrs.dto.response.AvailableCoursesWrapper;
 import com.bandung.ekrs.dto.response.EnrolledCoursesWrapper;
 import com.bandung.ekrs.dto.response.EnrollmentResponse;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -249,6 +252,84 @@ public class StudentDataController {
             return ResponseEntity.ok("Profile image updated successfully");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Failed to update profile image: " + e.getMessage());
+        }
+    }
+
+    @PutMapping("/update-profile")
+    @Operation(
+        summary = "Update student profile",
+        description = "Updates the editable fields of the student profile. All fields are optional."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Successfully updated student profile",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = StudentDataResponse.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid request data",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Unauthorized - User not authenticated",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Student profile not found",
+            content = @Content
+        )
+    })
+    public ResponseEntity<StudentDataResponse> updateStudentProfile(
+            Authentication authentication,
+            @RequestBody UpdateStudentDataRequest request) {
+        String username = authentication.getName();
+        return ResponseEntity.ok(studentDataService.updateStudentData(username, request));
+    }
+
+    @PutMapping("/update-password")
+    @Operation(
+        summary = "Update password",
+        description = "Updates the user's password after verifying the old password"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Password successfully updated"
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid password or password requirements not met",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Current password is incorrect",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "User not found",
+            content = @Content
+        )
+    })
+    public ResponseEntity<String> updatePassword(
+            Authentication authentication,
+            @RequestBody UpdatePasswordRequest request) {
+        try {
+            studentDataService.updatePassword(
+                authentication.getName(),
+                request.getOldPassword(),
+                request.getNewPassword()
+            );
+            return ResponseEntity.ok("Password updated successfully");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 } 

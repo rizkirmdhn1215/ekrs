@@ -1,10 +1,13 @@
 package com.bandung.ekrs.service;
 
+import com.bandung.ekrs.dto.request.UpdateStudentDataRequest;
 import com.bandung.ekrs.dto.response.*;
 import com.bandung.ekrs.model.*;
+import com.bandung.ekrs.model.enums.AccountRole;
 import com.bandung.ekrs.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,6 +30,7 @@ public class StudentDataService {
     private final CoursePrerequisiteRepository coursePrerequisiteRepository;
     private final GradeRepository gradeRepository;
     private final MinioService minioService;
+    private final PasswordEncoder passwordEncoder;
 
     public StudentDataResponse getCurrentStudentData(String username) {
         Account account = accountRepository.findByUsername(username)
@@ -513,5 +517,56 @@ public class StudentDataService {
         // If the URL contains a query string, remove it
         String path = url.split("\\?")[0];
         return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    @Transactional
+    public StudentDataResponse updateStudentData(String username, UpdateStudentDataRequest request) {
+        Account account = accountRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        StudentProfile student = studentProfileRepository.findByAccount(account)
+                .orElseThrow(() -> new RuntimeException("Student profile not found"));
+
+        // Update only the fields that are present in the request
+        if (request.getFirstName() != null) {
+            studentProfileRepository.updateFirstName(student.getStudentId(), request.getFirstName());
+        }
+        if (request.getLastName() != null) {
+            studentProfileRepository.updateLastName(student.getStudentId(), request.getLastName());
+        }
+        if (request.getNpm() != null) {
+            studentProfileRepository.updateNpm(student.getStudentId(), request.getNpm());
+        }
+        if (request.getAddress() != null) {
+            studentProfileRepository.updateAddress(student.getStudentId(), request.getAddress());
+        }
+        if (request.getCreditLimit() != null) {
+            studentProfileRepository.updateCreditLimit(student.getStudentId(), request.getCreditLimit());
+        }
+
+        // Return updated data
+        return getCurrentStudentData(username);
+    }
+
+    @Transactional
+    public void updatePassword(String username, String oldPassword, String newPassword) {
+        Account account = accountRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Check if old password matches
+        if (!passwordEncoder.matches(oldPassword, account.getPassword())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+
+        // Validate new password
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new RuntimeException("New password must be at least 6 characters long");
+        }
+
+        // Update only the password field using specific query
+        accountRepository.updatePassword(
+            account.getId(), 
+            passwordEncoder.encode(newPassword)
+        );
     }
 } 
