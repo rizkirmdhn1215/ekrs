@@ -11,7 +11,6 @@ import java.util.Optional;
 @Repository
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer> {
     List<Enrollment> findByStudentStudentId(Integer studentId);
-    List<Enrollment> findByCourseId(Integer courseId);
     List<Enrollment> findBySemesterId(Integer semesterId);
     List<Enrollment> findByStudentStudentIdAndSemesterId(Integer studentId, Integer semesterId);
     boolean existsByStudentStudentIdAndCourseIdAndSemesterId(Integer studentId, Integer courseId, Integer semesterId);
@@ -29,4 +28,50 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
         @Param("courseId") Integer courseId,
         @Param("semesterId") Integer semesterId
     );
+
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId AND e.finished = false")
+    Integer countActiveByCourseId(@Param("courseId") Integer courseId);
+
+    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId AND e.semester.id = :semesterId AND e.finished = false")
+    Integer countActiveByCourseIdAndSemesterId(
+        @Param("courseId") Integer courseId,
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT e FROM Enrollment e WHERE e.student.studentId = :studentId AND e.semester.id = :semesterId AND e.finished = false")
+    List<Enrollment> findActiveByStudentStudentIdAndSemesterId(
+        @Param("studentId") Integer studentId,
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT COUNT(e) > 0 FROM Enrollment e WHERE " +
+           "e.student.studentId = :studentId AND " +
+           "e.course.id = :courseId AND " +
+           "e.semester.id = :semesterId AND " +
+           "e.finished = false")
+    boolean hasActiveEnrollment(
+        @Param("studentId") Integer studentId,
+        @Param("courseId") Integer courseId,
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT e FROM Enrollment e " +
+           "WHERE e.student.studentId = :studentId " +
+           "AND e.course.id = :courseId")
+    List<Enrollment> findByStudentStudentIdAndCourseId(
+        @Param("studentId") Integer studentId,
+        @Param("courseId") Integer courseId
+    );
+
+    @Query("SELECT e FROM Enrollment e " +
+           "WHERE e.student.studentId = :studentId " +
+           "AND e.finished = :finished")
+    List<Enrollment> findByStudentStudentIdAndFinished(
+        @Param("studentId") Integer studentId,
+        @Param("finished") Boolean finished
+    );
+
+    @Query("SELECT e FROM Enrollment e WHERE e.course.id = :courseId")
+    List<Enrollment> findByCourseId(@Param("courseId") Integer courseId);
+
 } 

@@ -15,10 +15,10 @@ public interface KhsRepository extends JpaRepository<Grade, Integer> {
             JOIN e.student s
             JOIN e.semester sem
             JOIN s.account a
-            WHERE sem.id = :semester
-            AND a.username = :username
-            ORDER BY e.course.courseCode
+            WHERE a.username = :username
+            AND e.finished = true
+            AND sem.id = :semesterId
+            ORDER BY sem.id, e.course.courseCode
             """)
-    List<Grade> findBySemesterAndUsername(@Param("semester") Integer semester, 
-                                        @Param("username") String username);
+    List<Grade> findAllByUsernameAndSemesterId(@Param("username") String username, @Param("semesterId") Integer semesterId);
 }

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "grades")
@@ -21,4 +22,7 @@ public class Grade {
 
     @Column(length = 2)
     private String grade;
+
+    @Column(name = "completion_date")
+    private LocalDate completionDate;
 } 

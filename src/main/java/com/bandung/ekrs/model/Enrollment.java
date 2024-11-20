@@ -5,8 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
 import java.util.Set;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "enrollment")
@@ -30,12 +30,13 @@ public class Enrollment {
     @JoinColumn(name = "semester")
     private Semester semester;
 
-    @Column(name = "enrollment_date")
-    private LocalDate enrollmentDate;
+    @Column(name = "finished")
+    private Boolean finished = false;
 
     @OneToMany(mappedBy = "enrollment")
     private Set<Grade> grades;
 
     @OneToMany(mappedBy = "enrollment")
     private Set<Attendance> attendances;
+
 } 

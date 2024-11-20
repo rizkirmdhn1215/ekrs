@@ -26,4 +26,7 @@ public class AvailableCourseResponse {
     private Integer maxStudents;
     private Integer currentEnrollment;
     private Boolean isFull;
+    private Boolean isFinished;
+    private String grade;
+    private String bobot;
 } 

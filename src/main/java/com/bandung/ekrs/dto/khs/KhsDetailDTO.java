@@ -13,8 +13,10 @@ public class KhsDetailDTO {
 
         private String semester;
         private String kodematkul;
+        private String namamatkul;
         private String sks;
         private String nilai;
         private String bobot;
+        private String completionDate;
     } 
 

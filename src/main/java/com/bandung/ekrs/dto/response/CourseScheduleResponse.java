@@ -18,7 +18,11 @@ public class CourseScheduleResponse {
     private Integer creditPoints;
     private String lecturerName;
     private LocalTime scheduleTime;
+    private String scheduleDay;
     private String location;
     private Integer maxStudents;
     private Integer currentEnrollment;
+    private String status;
+    private String grade;
+    private String bobot;
 } 
