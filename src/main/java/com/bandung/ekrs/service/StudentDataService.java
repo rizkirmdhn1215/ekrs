@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -568,5 +571,108 @@ public class StudentDataService {
             account.getId(), 
             passwordEncoder.encode(newPassword)
         );
+    }
+
+    public WeeklyScheduleResponse getWeeklySchedule() {
+        // Get current semester
+        Semester currentSemester = semesterRepository
+                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
+                .orElseThrow(() -> new RuntimeException("Current semester not found"));
+
+        // Get all courses
+        List<Course> allCourses = courseRepository.findAll();
+
+        // Group courses by day
+        Map<String, List<CourseScheduleResponse>> scheduleByDay = allCourses.stream()
+                .filter(course -> course.getScheduleDay() != null) // Filter out courses with no schedule
+                .collect(Collectors.groupingBy(
+                    Course::getScheduleDay,
+                    Collectors.mapping(course -> {
+                        // Get current enrollment for the course
+                        Integer currentEnrollment = enrollmentRepository
+                                .countByCourseIdAndSemesterId(course.getId(), currentSemester.getId());
+
+                        // Build lecturer name
+                        String lecturerName = course.getLecturer() != null ?
+                                course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() :
+                                null;
+
+                        return CourseScheduleResponse.builder()
+                                .courseId(course.getId())
+                                .courseCode(course.getCourseCode())
+                                .courseName(course.getCourseName())
+                                .creditPoints(course.getCreditPoints())
+                                .lecturerName(lecturerName)
+                                .scheduleTime(course.getScheduleTime())
+                                .location(course.getLocation())
+                                .maxStudents(course.getMaxStudents())
+                                .currentEnrollment(currentEnrollment)
+                                .build();
+                    }, Collectors.toList())
+                ));
+
+        // Ensure all days are present in the response, even if empty
+        List<String> allDays = Arrays.asList("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday");
+        allDays.forEach(day -> scheduleByDay.putIfAbsent(day, new ArrayList<>()));
+
+        return WeeklyScheduleResponse.builder()
+                .schedule(scheduleByDay)
+                .build();
+    }
+
+    public WeeklyScheduleResponse getEnrolledSchedule(String username) {
+        // Get current student
+        Account account = accountRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        StudentProfile student = studentProfileRepository.findByAccount(account)
+                .orElseThrow(() -> new RuntimeException("Student profile not found"));
+
+        // Get current semester
+        Semester currentSemester = semesterRepository
+                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
+                .orElseThrow(() -> new RuntimeException("Current semester not found"));
+
+        // Get enrollments for current student and semester
+        List<Enrollment> enrollments = enrollmentRepository
+                .findByStudentStudentIdAndSemesterId(student.getStudentId(), currentSemester.getId());
+
+        // Group courses by day
+        Map<String, List<CourseScheduleResponse>> scheduleByDay = enrollments.stream()
+                .map(Enrollment::getCourse)
+                .filter(course -> course.getScheduleDay() != null) // Filter out courses with no schedule
+                .collect(Collectors.groupingBy(
+                    Course::getScheduleDay,
+                    Collectors.mapping(course -> {
+                        // Get current enrollment for the course
+                        Integer currentEnrollment = enrollmentRepository
+                                .countByCourseIdAndSemesterId(course.getId(), currentSemester.getId());
+
+                        // Build lecturer name
+                        String lecturerName = course.getLecturer() != null ?
+                                course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() :
+                                null;
+
+                        return CourseScheduleResponse.builder()
+                                .courseId(course.getId())
+                                .courseCode(course.getCourseCode())
+                                .courseName(course.getCourseName())
+                                .creditPoints(course.getCreditPoints())
+                                .lecturerName(lecturerName)
+                                .scheduleTime(course.getScheduleTime())
+                                .location(course.getLocation())
+                                .maxStudents(course.getMaxStudents())
+                                .currentEnrollment(currentEnrollment)
+                                .build();
+                    }, Collectors.toList())
+                ));
+
+        // Ensure all days are present in the response, even if empty
+        List<String> allDays = Arrays.asList("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday");
+        allDays.forEach(day -> scheduleByDay.putIfAbsent(day, new ArrayList<>()));
+
+        return WeeklyScheduleResponse.builder()
+                .schedule(scheduleByDay)
+                .build();
     }
 } 

@@ -8,6 +8,8 @@ import com.bandung.ekrs.dto.response.EnrolledCoursesWrapper;
 import com.bandung.ekrs.dto.response.EnrollmentResponse;
 import com.bandung.ekrs.dto.response.StudentDataResponse;
 import com.bandung.ekrs.dto.response.UnenrollmentResponse;
+import com.bandung.ekrs.dto.response.CourseScheduleResponse;
+import com.bandung.ekrs.dto.response.WeeklyScheduleResponse;
 import com.bandung.ekrs.service.StudentDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -331,5 +333,59 @@ public class StudentDataController {
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+    @GetMapping("/weekly-schedule")
+    @Operation(
+        summary = "Get weekly course schedule",
+        description = "Retrieves all courses grouped by days of the week"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved weekly schedule",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = WeeklyScheduleResponse.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Current semester not found",
+            content = @Content
+        )
+    })
+    public ResponseEntity<WeeklyScheduleResponse> getWeeklySchedule() {
+        return ResponseEntity.ok(studentDataService.getWeeklySchedule());
+    }
+
+    @GetMapping("/enrolled-schedule")
+    @Operation(
+        summary = "Get enrolled courses schedule",
+        description = "Retrieves the schedule of all courses that the current user is enrolled in, grouped by days"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved enrolled courses schedule",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = WeeklyScheduleResponse.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Unauthorized - User not authenticated",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Student profile or current semester not found",
+            content = @Content
+        )
+    })
+    public ResponseEntity<WeeklyScheduleResponse> getEnrolledSchedule(Authentication authentication) {
+        String username = authentication.getName();
+        return ResponseEntity.ok(studentDataService.getEnrolledSchedule(username));
     }
 } 
