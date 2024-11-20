@@ -361,13 +361,13 @@ public class StudentDataController {
 
     @GetMapping("/enrolled-schedule")
     @Operation(
-        summary = "Get enrolled courses schedule",
-        description = "Retrieves the schedule of all courses that the current user is enrolled in, grouped by days"
+        summary = "Mendapatkan jadwal mata kuliah yang diambil",
+        description = "Mengambil jadwal semua mata kuliah yang sedang diambil oleh mahasiswa, dikelompokkan berdasarkan hari"
     )
     @ApiResponses(value = {
         @ApiResponse(
             responseCode = "200",
-            description = "Successfully retrieved enrolled courses schedule",
+            description = "Berhasil mengambil jadwal mata kuliah",
             content = @Content(
                 mediaType = "application/json",
                 schema = @Schema(implementation = WeeklyScheduleResponse.class)
@@ -375,12 +375,12 @@ public class StudentDataController {
         ),
         @ApiResponse(
             responseCode = "401",
-            description = "Unauthorized - User not authenticated",
+            description = "Tidak diizinkan - Pengguna belum terautentikasi",
             content = @Content
         ),
         @ApiResponse(
             responseCode = "404",
-            description = "Student profile or current semester not found",
+            description = "Profil mahasiswa atau semester saat ini tidak ditemukan",
             content = @Content
         )
     })
