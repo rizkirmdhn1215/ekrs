@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RequestMethod;
 
 @RestController
-@RequestMapping("/krs")
+@RequestMapping("/")
 @RequiredArgsConstructor
 @Tag(name = "Data Mahasiswa", description = "Endpoint untuk mengelola data mahasiswa")
 public class StudentDataController {
@@ -72,7 +72,7 @@ public class StudentDataController {
         return ResponseEntity.ok(studentDataService.getCurrentStudentData(username));
     }
 
-    @GetMapping("/mata-kuliah-diambil")
+    @GetMapping("/krs/mata-kuliah-diambil")
     @Operation(
         summary = "Mendapatkan mata kuliah yang diambil",
         description = "Mengambil semua mata kuliah yang sedang diambil oleh mahasiswa"
@@ -102,7 +102,7 @@ public class StudentDataController {
         return ResponseEntity.ok(studentDataService.getEnrolledCourses(username));
     }
 
-    @GetMapping("/mata-kuliah-tersedia")
+    @GetMapping("/krs/mata-kuliah-tersedia")
     @Operation(
         summary = "Mendapatkan mata kuliah tersedia",
         description = "Mengambil semua mata kuliah yang tersedia untuk semester ini"
@@ -132,7 +132,7 @@ public class StudentDataController {
         return ResponseEntity.ok(studentDataService.getAvailableCourses(username));
     }
 
-    @PostMapping("/ambil-mata-kuliah")
+    @PostMapping("/krs/ambil-mata-kuliah")
     @Operation(
         summary = "Ambil mata kuliah",
         description = "Mendaftarkan mahasiswa ke mata kuliah yang dipilih"
@@ -174,7 +174,7 @@ public class StudentDataController {
         return ResponseEntity.ok(studentDataService.enrollCourse(username, request.getCourseId()));
     }
 
-    @DeleteMapping("/batalkan-mata-kuliah/{courseId}")
+    @DeleteMapping("/krs/batalkan-mata-kuliah/{courseId}")
     @Operation(
         summary = "Batalkan mata kuliah",
         description = "Membatalkan pendaftaran mata kuliah yang dipilih"
@@ -206,7 +206,7 @@ public class StudentDataController {
         return ResponseEntity.ok(studentDataService.unenrollCourse(username, courseId));
     }
 
-    @PostMapping(value = "/foto-profil", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/profile/foto-profil", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
         summary = "Perbarui foto profil",
         description = "Memperbarui foto profil mahasiswa"
@@ -256,7 +256,7 @@ public class StudentDataController {
         }
     }
 
-    @PutMapping("/perbarui-profil")
+    @PutMapping("/profile/perbarui-profil")
     @Operation(
         summary = "Perbarui profil mahasiswa",
         description = "Memperbarui data profil mahasiswa yang dapat diubah"
@@ -293,7 +293,7 @@ public class StudentDataController {
         return ResponseEntity.ok(studentDataService.updateStudentData(username, request));
     }
 
-    @PutMapping("/perbarui-password")
+    @PutMapping("/profile/perbarui-password")
     @Operation(
         summary = "Perbarui kata sandi",
         description = "Memperbarui kata sandi pengguna setelah verifikasi kata sandi lama"
