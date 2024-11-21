@@ -126,4 +126,49 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
             @Param("search") String search,
             @Param("scheduleDay") String scheduleDay,
             Pageable pageable);
+
+    @Query(value = "SELECT * FROM courses c " +
+           "WHERE (c.department_id = :departmentId OR c.department_id IS NULL) " +
+           "AND (:search IS NULL OR " +
+           "    c.course_code ILIKE CONCAT('%', CAST(:search AS text), '%') OR " +
+           "    c.course_name ILIKE CONCAT('%', CAST(:search AS text), '%')) " +
+           "ORDER BY c.semester_id",
+           nativeQuery = true)
+    Page<Course> findAvailableCoursesWithFilters(
+        @Param("departmentId") Integer departmentId,
+        @Param("search") String search,
+        Pageable pageable
+    );
+
+    @Query(value = "SELECT * FROM courses c " +
+           "WHERE (c.department_id = :departmentId OR c.department_id IS NULL) " +
+           "AND c.semester_id = :semesterId " +
+           "AND (:search IS NULL OR " +
+           "    c.course_code ILIKE CONCAT('%', CAST(:search AS text), '%') OR " +
+           "    c.course_name ILIKE CONCAT('%', CAST(:search AS text), '%')) " +
+           "ORDER BY c.semester_id",
+           nativeQuery = true)
+    Page<Course> findAvailableCoursesWithFilters(
+        @Param("departmentId") Integer departmentId,
+        @Param("search") String search,
+        @Param("semesterId") Integer semesterId,
+        Pageable pageable
+    );
+
+    @Query(value = "SELECT * FROM courses c " +
+           "WHERE (c.department_id = :departmentId OR c.department_id IS NULL) " +
+           "AND (:semesterId IS NULL OR c.semester_id = :semesterId) " +
+           "AND (:search IS NULL OR " +
+           "    c.course_code ILIKE CONCAT('%', CAST(:search AS text), '%') OR " +
+           "    c.course_name ILIKE CONCAT('%', CAST(:search AS text), '%')) " +
+           "AND (:scheduleDay IS NULL OR c.schedule_day = :scheduleDay) " +
+           "ORDER BY c.semester_id, c.schedule_day, c.schedule_time",
+           nativeQuery = true)
+    Page<Course> findCoursesWithFilters(
+        @Param("departmentId") Integer departmentId,
+        @Param("search") String search,
+        @Param("scheduleDay") String scheduleDay,
+        @Param("semesterId") Integer semesterId,
+        Pageable pageable
+    );
 } 

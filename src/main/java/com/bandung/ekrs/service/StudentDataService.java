@@ -74,6 +74,19 @@ public class StudentDataService {
         int totalEnrolledCredits = calculateTotalEnrolledCredits(currentEnrollments);
         int creditLeft = Math.max(0, student.getCreditLimit() - totalEnrolledCredits);
 
+        // Build supervisor response if supervisor exists
+        SupervisorResponse supervisorResponse = null;
+        if (student.getSupervisor() != null) {
+            LecturerProfile supervisor = student.getSupervisor();
+            supervisorResponse = SupervisorResponse.builder()
+                    .lecturerId(supervisor.getLecturerId())
+                    .firstName(supervisor.getFirstName())
+                    .lastName(supervisor.getLastName())
+                    .departmentName(supervisor.getDepartment() != null ? 
+                            supervisor.getDepartment().getName() : null)
+                    .build();
+        }
+
         return StudentDataResponse.builder()
                 .firstName(student.getFirstName())
                 .lastName(student.getLastName())
@@ -81,7 +94,7 @@ public class StudentDataService {
                 .enrollmentYear(student.getEnrollmentYear().toString())
                 .creditLimit(student.getCreditLimit())
                 .creditLeft(creditLeft)
-                .supervisor(null)
+                .supervisor(supervisorResponse)
                 .status(student.getStatus())
                 .address(student.getAddress())
                 .imageUrl(imageUrl)
@@ -218,7 +231,13 @@ public class StudentDataService {
                 .build();
     }
 
-    public AvailableCoursesWrapper getAvailableCourses(String username) {
+    public AvailableCoursesWrapper getAvailableCourses(
+        String username, 
+        String search, 
+        int page, 
+        int size,
+        Integer semesterId
+    ) {
         try {
             // Get current student and their department
             Account account = accountRepository.findByUsername(username)
@@ -227,81 +246,101 @@ public class StudentDataService {
             StudentProfile student = studentProfileRepository.findByAccount(account)
                     .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
-            // Get student's department
             Department studentDepartment = student.getDepartment();
             if (studentDepartment == null) {
                 throw new RuntimeException("Student department not found");
             }
 
-            // Get both department-specific and general courses
-            List<Course> availableCourses = courseRepository.findByDepartmentIdOrGeneralCourses(studentDepartment.getId());
-
-            // Group courses by semester
-            Map<Integer, List<AvailableCourseResponse>> coursesBySemester = new TreeMap<>();
-
-            for (Course course : availableCourses) {
-                // Get prerequisites for this course
-                List<CoursePrerequisite> prerequisites = 
-                    coursePrerequisiteRepository.findByCourseId(course.getId());
-
-                // Check if student has completed prerequisites
-                boolean prerequisitesMet = checkPrerequisites(student, prerequisites);
-
-                // Get current enrollment count
-                Integer currentEnrollment = enrollmentRepository.countActiveByCourseId(course.getId());
-                boolean isFull = currentEnrollment >= course.getMaxStudents();
-
-                // Check if student has completed this course and get their grade
-                Optional<Grade> studentGrade = gradeRepository.findTopByEnrollmentStudentAndEnrollmentCourseOrderByCompletionDateDesc(
-                    student, course);
-
-                AvailableCourseResponse courseDTO = AvailableCourseResponse.builder()
-                    .courseId(course.getId())
-                    .courseCode(course.getCourseCode())
-                    .courseName(course.getCourseName())
-                    .creditPoints(course.getCreditPoints())
-                    .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
-                    .lecturerName(course.getLecturer() != null ? 
-                        course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
-                    .scheduleTime(course.getScheduleTime())
-                    .scheduleDay(course.getScheduleDay())
-                    .location(course.getLocation())
-                    .departmentId(course.getDepartment() != null ? course.getDepartment().getId() : null)
-                    .departmentName(course.getDepartment() != null ? 
-                        course.getDepartment().getName() : "General Course")
-                    .maxStudents(course.getMaxStudents())
-                    .currentEnrollment(currentEnrollment)
-                    .isFull(isFull)
-                    .isFinished(studentGrade.isPresent())
-                    .grade(studentGrade.map(Grade::getGrade).orElse(null))
-                    .bobot(studentGrade.map(grade -> convertGradeToBobot(grade.getGrade())).orElse(null))
-                    .prerequisitesMet(prerequisitesMet)
-                    .semesterId(course.getSemester().getId())
-                    .semesterName(course.getSemester().getName())
-                    .build();
-
-                // Group by semester
-                coursesBySemester.computeIfAbsent(
-                    course.getSemester().getId(), 
-                    k -> new ArrayList<>()
-                ).add(courseDTO);
+            Pageable pageable = PageRequest.of(page, size);
+            Page<Course> coursePage;
+            
+            if (semesterId != null) {
+                coursePage = courseRepository.findAvailableCoursesWithFilters(
+                    studentDepartment.getId(),
+                    search,
+                    semesterId,
+                    pageable
+                );
+            } else {
+                coursePage = courseRepository.findAvailableCoursesWithFilters(
+                    studentDepartment.getId(),
+                    search,
+                    pageable
+                );
             }
 
-            // Convert grouped courses to SemesterCoursesDTO
-            List<SemesterCoursesDTO> semesterCourses = coursesBySemester.entrySet().stream()
-                .map(entry -> SemesterCoursesDTO.builder()
-                    .semesterId(entry.getKey())
-                    .semesterName("Semester " + entry.getKey())
-                    .courses(entry.getValue())
-                    .build())
+            List<AvailableCourseResponse> courses = coursePage.getContent().stream()
+                .map(course -> {
+                    List<CoursePrerequisite> prerequisites = 
+                        coursePrerequisiteRepository.findByCourseId(course.getId());
+                    boolean prerequisitesMet = checkPrerequisites(student, prerequisites);
+                    Integer currentEnrollment = enrollmentRepository.countActiveByCourseId(course.getId());
+                    boolean isFull = currentEnrollment >= course.getMaxStudents();
+                    Optional<Grade> studentGrade = gradeRepository
+                        .findTopByEnrollmentStudentAndEnrollmentCourseOrderByCompletionDateDesc(
+                            student, course);
+
+                    return AvailableCourseResponse.builder()
+                        .courseId(course.getId())
+                        .courseCode(course.getCourseCode())
+                        .courseName(course.getCourseName())
+                        .creditPoints(course.getCreditPoints())
+                        .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
+                        .lecturerName(course.getLecturer() != null ? 
+                            course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
+                        .scheduleTime(course.getScheduleTime())
+                        .scheduleDay(course.getScheduleDay())
+                        .location(course.getLocation())
+                        .departmentId(course.getDepartment() != null ? course.getDepartment().getId() : null)
+                        .departmentName(course.getDepartment() != null ? 
+                            course.getDepartment().getName() : "General Course")
+                        .maxStudents(course.getMaxStudents())
+                        .currentEnrollment(currentEnrollment)
+                        .isFull(isFull)
+                        .isFinished(studentGrade.isPresent())
+                        .grade(studentGrade.map(Grade::getGrade).orElse(null))
+                        .bobot(studentGrade.map(grade -> convertGradeToBobot(grade.getGrade())).orElse(null))
+                        .prerequisitesMet(prerequisitesMet)
+                        .semesterId(course.getSemester().getId())
+                        .semesterName(course.getSemester().getName())
+                        .build();
+                })
                 .collect(Collectors.toList());
 
-            return AvailableCoursesWrapper.builder()
-                .semesterCourses(semesterCourses)
-                .message("Successfully retrieved available courses")
-                .statusCode(200)
-                .status("OK")
-                .build();
+            // If semesterId is provided, group by semester
+            if (semesterId != null) {
+                Map<Integer, List<AvailableCourseResponse>> coursesBySemester = new TreeMap<>();
+                coursesBySemester.put(semesterId, courses);
+                
+                List<SemesterCoursesDTO> semesterCourses = coursesBySemester.entrySet().stream()
+                    .map(entry -> SemesterCoursesDTO.builder()
+                        .semesterId(entry.getKey())
+                        .semesterName("Semester " + entry.getKey())
+                        .courses(entry.getValue())
+                        .build())
+                    .collect(Collectors.toList());
+
+                return AvailableCoursesWrapper.builder()
+                    .semesterCourses(semesterCourses)
+                    .currentPage(coursePage.getNumber())
+                    .totalPages(coursePage.getTotalPages())
+                    .totalElements(coursePage.getTotalElements())
+                    .message("Successfully retrieved available courses")
+                    .statusCode(200)
+                    .status("OK")
+                    .build();
+            } else {
+                // If no semesterId, return flat list of courses
+                return AvailableCoursesWrapper.builder()
+                    .courses(courses)  // Add this field to AvailableCoursesWrapper
+                    .currentPage(coursePage.getNumber())
+                    .totalPages(coursePage.getTotalPages())
+                    .totalElements(coursePage.getTotalElements())
+                    .message("Successfully retrieved available courses")
+                    .statusCode(200)
+                    .status("OK")
+                    .build();
+            }
 
         } catch (Exception e) {
             return AvailableCoursesWrapper.builder()
@@ -618,6 +657,7 @@ public class StudentDataService {
             String username, 
             String search, 
             String scheduleDay,
+            Integer semesterId,
             int page, 
             int size) {
         try {
@@ -638,9 +678,9 @@ public class StudentDataService {
 
             Page<Course> coursePage = courseRepository.findCoursesWithFilters(
                 student.getDepartment().getId(),
-                getCurrentSemester().getId(),
                 search,
                 scheduleDay,
+                semesterId,
                 pageable
             );
 
@@ -650,6 +690,12 @@ public class StudentDataService {
                         course.getId(), 
                         getCurrentSemester().getId()
                     );
+
+                    // Handle nullable dates
+                    String startDate = course.getSemester().getStartDate() != null ? 
+                        course.getSemester().getStartDate().toString() : null;
+                    String endDate = course.getSemester().getEndDate() != null ? 
+                        course.getSemester().getEndDate().toString() : null;
 
                     return CourseScheduleWithSemesterResponse.builder()
                         .courseId(course.getId())
@@ -669,8 +715,8 @@ public class StudentDataService {
                         .semester(SemesterResponse.builder()
                             .id(course.getSemester().getId())
                             .name(course.getSemester().getName())
-                            .startDate(course.getSemester().getStartDate().toString())
-                            .endDate(course.getSemester().getEndDate().toString())
+                            .startDate(startDate)  // Use nullable startDate
+                            .endDate(endDate)      // Use nullable endDate
                             .build())
                         .build();
                 })

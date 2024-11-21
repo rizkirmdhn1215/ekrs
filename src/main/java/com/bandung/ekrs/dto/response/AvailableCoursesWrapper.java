@@ -13,6 +13,10 @@ import java.util.List;
 @AllArgsConstructor
 public class AvailableCoursesWrapper {
     private List<SemesterCoursesDTO> semesterCourses;
+    private List<AvailableCourseResponse> courses;
+    private int currentPage;
+    private int totalPages;
+    private long totalElements;
     private String message;
     private int statusCode;
     private String status;

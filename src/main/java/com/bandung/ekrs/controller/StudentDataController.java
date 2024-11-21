@@ -106,7 +106,7 @@ public class StudentDataController {
     @GetMapping("/krs/mata-kuliah-tersedia")
     @Operation(
         summary = "Mendapatkan mata kuliah tersedia",
-        description = "Mengambil semua mata kuliah yang tersedia untuk semester ini"
+        description = "Mengambil semua mata kuliah yang tersedia untuk semester ini dengan paginasi dan pencarian"
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -117,20 +117,23 @@ public class StudentDataController {
                 schema = @Schema(implementation = AvailableCoursesWrapper.class)
             )
         ),
-        @ApiResponse(
-            responseCode = "401",
-            description = "Tidak terautentikasi - Pengguna belum login",
-            content = @Content
-        ),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Profil mahasiswa atau semester tidak ditemukan",
-            content = @Content
-        )
+        @ApiResponse(responseCode = "401", description = "Tidak terautentikasi"),
+        @ApiResponse(responseCode = "404", description = "Data tidak ditemukan")
     })
-    public ResponseEntity<AvailableCoursesWrapper> getMataKuliahTersedia(Authentication authentication) {
+    public ResponseEntity<AvailableCoursesWrapper> getMataKuliahTersedia(
+            Authentication authentication,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer semesterId) {
         String username = authentication.getName();
-        return ResponseEntity.ok(studentDataService.getAvailableCourses(username));
+        return ResponseEntity.ok(studentDataService.getAvailableCourses(
+            username, 
+            search, 
+            page, 
+            size,
+            semesterId
+        ));
     }
 
     @PostMapping("/krs/ambil-mata-kuliah")
@@ -338,7 +341,7 @@ public class StudentDataController {
     @GetMapping("/matakuliah/all")
     @Operation(
         summary = "Mendapatkan jadwal mingguan",
-        description = "Mengambil semua jadwal mata kuliah untuk jurusan mahasiswa dengan paginasi, pencarian, dan informasi semester"
+        description = "Mengambil semua jadwal mata kuliah untuk jurusan mahasiswa dengan paginasi, pencarian, dan filter semester"
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -359,12 +362,14 @@ public class StudentDataController {
             Authentication authentication,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String scheduleDay,
+            @RequestParam(required = false) Integer semesterId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(studentDataService.getWeeklySchedule(
             authentication.getName(), 
             search,
             scheduleDay,
+            semesterId,
             page, 
             size
         ));
