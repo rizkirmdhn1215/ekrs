@@ -4,20 +4,19 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class KhsResponse {
-    private List<KhsDTO> data;
+public class IpkResponse {
+    private String student_id;
+    private List<SemesterIpkDTO> semesterDetails;
+    private double ipk;
+    private int totalSksLulus;
     private String message;
     private int statusCode;
     private String status;
-    private double ips;
-    private double ipk;
-    private int sksLulus;
-    private int maxSks;
-}
-
+} 

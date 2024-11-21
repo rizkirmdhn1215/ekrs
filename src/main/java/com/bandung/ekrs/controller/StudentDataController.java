@@ -1,5 +1,6 @@
 package com.bandung.ekrs.controller;
 
+import com.bandung.ekrs.dto.khs.IpkResponse;
 import com.bandung.ekrs.dto.khs.KhsResponse;
 import com.bandung.ekrs.dto.request.EnrollCourseRequest;
 import com.bandung.ekrs.dto.request.UpdateStudentDataRequest;
@@ -419,6 +420,37 @@ public class StudentDataController {
     public ResponseEntity<KhsResponse> getKhsBySemester(Authentication authentication, @RequestParam Integer semester) {
         String username = authentication.getName();
         KhsResponse response = studentDataService.getKhsBySemester(username, semester);
+        return ResponseEntity.status(response.getStatusCode()).body(response);
+    }
+
+    @GetMapping("/khs/ipk")
+    @Operation(
+        summary = "Mendapatkan IPK dari semua semester",
+        description = "Mengambil IPK mahasiswa dari seluruh semester yang telah ditempuh"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Berhasil mengambil IPK",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = IpkResponse.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Data nilai tidak ditemukan",
+            content = @Content
+        ),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Terjadi kesalahan pada server",
+            content = @Content
+        )
+    })
+    public ResponseEntity<IpkResponse> getIpk(Authentication authentication) {
+        String username = authentication.getName();
+        IpkResponse response = studentDataService.getIpk(username);
         return ResponseEntity.status(response.getStatusCode()).body(response);
     }
 } 

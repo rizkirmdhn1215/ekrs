@@ -1,8 +1,6 @@
 package com.bandung.ekrs.service;
 
-import com.bandung.ekrs.dto.khs.KhsDTO;
-import com.bandung.ekrs.dto.khs.KhsDetailDTO;
-import com.bandung.ekrs.dto.khs.KhsResponse;
+import com.bandung.ekrs.dto.khs.*;
 import com.bandung.ekrs.dto.request.UpdateStudentDataRequest;
 import com.bandung.ekrs.dto.response.*;
 import com.bandung.ekrs.model.*;
@@ -766,6 +764,39 @@ public class StudentDataService {
                     .build())
                 .collect(Collectors.toList());
 
+            // Calculate IPS (Semester GPA)
+            double totalBobot = grades.stream()
+                .mapToDouble(grade -> Double.parseDouble(convertGradeToBobot(grade.getGrade())) * grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+            int totalSks = grades.stream()
+                .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+            double ips = totalSks > 0 ? totalBobot / totalSks : 0.0;
+            ips = Math.round(ips * 100.0) / 100.0; // Round to two decimal places
+
+            // Calculate IPK (Cumulative GPA)
+            List<Grade> allGrades = khsRepository.findAllByUsername(username);
+            double totalBobotAll = allGrades.stream()
+                .mapToDouble(grade -> Double.parseDouble(convertGradeToBobot(grade.getGrade())) * grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+            int totalSksAll = allGrades.stream()
+                .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+            double ipk = totalSksAll > 0 ? totalBobotAll / totalSksAll : 0.0;
+            ipk = Math.round(ipk * 100.0) / 100.0; // Round to two decimal places
+
+            // SKS Lulus for the specified semester requires a minimum grade of C
+            int sksLulus = grades.stream()
+                .filter(grade -> {
+                    String gradeValue = grade.getGrade();
+                    return gradeValue.equals("A") || gradeValue.equals("AB") || gradeValue.equals("B") || gradeValue.equals("BC") || gradeValue.equals("C");
+                })
+                .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+
+            // Calculate MAX SKS for next semester
+            int maxSks = calculateMaxSks(ips);
+
             KhsDTO khsDTO = KhsDTO.builder()
                 .student_id(username)
                 .khs(khsDetails)
@@ -776,10 +807,124 @@ public class StudentDataService {
                 .message("T-SDT-SUCC-001")
                 .statusCode(200)
                 .status("OK")
+                .ips(ips)
+                .ipk(ipk)
+                .sksLulus(sksLulus)
+                .maxSks(maxSks)
                 .build();
 
         } catch (Exception e) {
             return KhsResponse.builder()
+                .message("T-SDT-ERR-001")
+                .statusCode(500)
+                .status("INTERNAL_SERVER_ERROR")
+                .build();
+        }
+    }
+
+    private int calculateMaxSks(double ips) {
+        if (ips >= 3.0) {
+            return 24;
+
+        } else {
+            return 21; // If IPS is below 3.0, set max SKS to 21
+        }
+    }
+
+    public IpkResponse getIpk(String username) {
+        try {
+            // Get all grades for the student
+            List<Grade> allGrades = khsRepository.findAllByUsername(username);
+
+            if (allGrades.isEmpty()) {
+                return IpkResponse.builder()
+                    .message("T-SDT-ERR-001")
+                    .statusCode(404)
+                    .status("NOT_FOUND")
+                    .build();
+            }
+
+            // Group grades by semester
+            Map<Integer, List<Grade>> gradesBySemester = allGrades.stream()
+                .collect(Collectors.groupingBy(
+                    grade -> grade.getEnrollment().getSemester().getId()
+                ));
+
+            // Calculate details for each semester
+            List<SemesterIpkDTO> semesterDetails = gradesBySemester.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    List<Grade> semesterGrades = entry.getValue();
+                    
+                    // Calculate IPS for this semester
+                    double totalBobot = semesterGrades.stream()
+                        .mapToDouble(grade -> Double.parseDouble(convertGradeToBobot(grade.getGrade())) 
+                            * grade.getEnrollment().getCourse().getCreditPoints())
+                        .sum();
+                    
+                    int totalSks = semesterGrades.stream()
+                        .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                        .sum();
+                    
+                    double ips = totalSks > 0 ? totalBobot / totalSks : 0.0;
+                    ips = Math.round(ips * 100.0) / 100.0; // Round to two decimal places
+
+                    // Calculate SKS Lulus for this semester
+                    int sksLulus = semesterGrades.stream()
+                        .filter(grade -> {
+                            String gradeValue = grade.getGrade();
+                            return gradeValue.equals("A") || gradeValue.equals("AB") || 
+                                   gradeValue.equals("B") || gradeValue.equals("BC") || 
+                                   gradeValue.equals("C");
+                        })
+                        .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                        .sum();
+
+                    return SemesterIpkDTO.builder()
+                        .semester(semesterGrades.get(0).getEnrollment().getSemester().getName())
+                        .ips(ips)
+                        .sksLulus(sksLulus)
+                        .totalSks(totalSks)
+                        .build();
+                })
+                .collect(Collectors.toList());
+
+            // Calculate overall IPK
+            double totalBobotAll = allGrades.stream()
+                .mapToDouble(grade -> Double.parseDouble(convertGradeToBobot(grade.getGrade())) 
+                    * grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+            
+            int totalSksAll = allGrades.stream()
+                .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+            
+            double ipk = totalSksAll > 0 ? totalBobotAll / totalSksAll : 0.0;
+            ipk = Math.round(ipk * 100.0) / 100.0; // Round to two decimal places
+
+            // Calculate total SKS Lulus
+            int totalSksLulus = allGrades.stream()
+                .filter(grade -> {
+                    String gradeValue = grade.getGrade();
+                    return gradeValue.equals("A") || gradeValue.equals("AB") || 
+                           gradeValue.equals("B") || gradeValue.equals("BC") || 
+                           gradeValue.equals("C");
+                })
+                .mapToInt(grade -> grade.getEnrollment().getCourse().getCreditPoints())
+                .sum();
+
+            return IpkResponse.builder()
+                .student_id(username)
+                .semesterDetails(semesterDetails)
+                .ipk(ipk)
+                .totalSksLulus(totalSksLulus)
+                .message("T-SDT-SUCC-001")
+                .statusCode(200)
+                .status("OK")
+                .build();
+
+        } catch (Exception e) {
+            return IpkResponse.builder()
                 .message("T-SDT-ERR-001")
                 .statusCode(500)
                 .status("INTERNAL_SERVER_ERROR")
