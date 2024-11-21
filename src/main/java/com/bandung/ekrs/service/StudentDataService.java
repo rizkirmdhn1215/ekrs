@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 import java.util.Comparator;
+import java.util.TreeMap;
 
 @Slf4j
 @Service
@@ -236,75 +237,126 @@ public class StudentDataService {
     }
 
     public AvailableCoursesWrapper getAvailableCourses(String username) {
-        Account account = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        try {
+            // Get current student and their department
+            Account account = accountRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        StudentProfile student = studentProfileRepository.findByAccount(account)
-                .orElseThrow(() -> new RuntimeException("Student profile not found"));
+            StudentProfile student = studentProfileRepository.findByAccount(account)
+                    .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
-        if (student.getDepartment() == null) {
-            throw new RuntimeException("Student is not assigned to any department");
+            // Get student's department
+            Department studentDepartment = student.getDepartment();
+            if (studentDepartment == null) {
+                throw new RuntimeException("Student department not found");
+            }
+
+            // Get both department-specific and general courses
+            List<Course> availableCourses = courseRepository.findByDepartmentIdOrGeneralCourses(studentDepartment.getId());
+
+            // Group courses by semester
+            Map<Integer, List<AvailableCourseResponse>> coursesBySemester = new TreeMap<>();
+
+            for (Course course : availableCourses) {
+                // Get prerequisites for this course
+                List<CoursePrerequisite> prerequisites = 
+                    coursePrerequisiteRepository.findByCourseId(course.getId());
+
+                // Check if student has completed prerequisites
+                boolean prerequisitesMet = checkPrerequisites(student, prerequisites);
+
+                // Get current enrollment count
+                Integer currentEnrollment = enrollmentRepository.countActiveByCourseId(course.getId());
+                boolean isFull = currentEnrollment >= course.getMaxStudents();
+
+                // Check if student has completed this course and get their grade
+                Optional<Grade> studentGrade = gradeRepository.findTopByEnrollmentStudentAndEnrollmentCourseOrderByCompletionDateDesc(
+                    student, course);
+
+                AvailableCourseResponse courseDTO = AvailableCourseResponse.builder()
+                    .courseId(course.getId())
+                    .courseCode(course.getCourseCode())
+                    .courseName(course.getCourseName())
+                    .creditPoints(course.getCreditPoints())
+                    .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
+                    .lecturerName(course.getLecturer() != null ? 
+                        course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
+                    .scheduleTime(course.getScheduleTime())
+                    .scheduleDay(course.getScheduleDay())
+                    .location(course.getLocation())
+                    .departmentId(course.getDepartment() != null ? course.getDepartment().getId() : null)
+                    .departmentName(course.getDepartment() != null ? 
+                        course.getDepartment().getName() : "General Course")
+                    .maxStudents(course.getMaxStudents())
+                    .currentEnrollment(currentEnrollment)
+                    .isFull(isFull)
+                    .isFinished(studentGrade.isPresent())
+                    .grade(studentGrade.map(Grade::getGrade).orElse(null))
+                    .bobot(studentGrade.map(grade -> convertGradeToBobot(grade.getGrade())).orElse(null))
+                    .prerequisitesMet(prerequisitesMet)
+                    .semesterId(course.getSemester().getId())
+                    .semesterName(course.getSemester().getName())
+                    .build();
+
+                // Group by semester
+                coursesBySemester.computeIfAbsent(
+                    course.getSemester().getId(), 
+                    k -> new ArrayList<>()
+                ).add(courseDTO);
+            }
+
+            // Convert grouped courses to SemesterCoursesDTO
+            List<SemesterCoursesDTO> semesterCourses = coursesBySemester.entrySet().stream()
+                .map(entry -> SemesterCoursesDTO.builder()
+                    .semesterId(entry.getKey())
+                    .semesterName("Semester " + entry.getKey())
+                    .courses(entry.getValue())
+                    .build())
+                .collect(Collectors.toList());
+
+            return AvailableCoursesWrapper.builder()
+                .semesterCourses(semesterCourses)
+                .message("Successfully retrieved available courses")
+                .statusCode(200)
+                .status("OK")
+                .build();
+
+        } catch (Exception e) {
+            return AvailableCoursesWrapper.builder()
+                .message(e.getMessage())
+                .statusCode(500)
+                .status("INTERNAL_SERVER_ERROR")
+                .build();
+        }
+    }
+
+    // Helper method to check prerequisites
+    private boolean checkPrerequisites(StudentProfile student, List<CoursePrerequisite> prerequisites) {
+        if (prerequisites.isEmpty()) {
+            return true;
         }
 
-        Semester currentSemester = semesterRepository
-                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
-                .orElseThrow(() -> new RuntimeException("Current semester not found"));
+        for (CoursePrerequisite prerequisite : prerequisites) {
+            // Check if student has completed this prerequisite course
+            boolean hasCompleted = enrollmentRepository.findByStudentStudentIdAndCourseId(
+                    student.getStudentId(), 
+                    prerequisite.getPrerequisiteCourse().getId()
+                ).stream()
+                .anyMatch(enrollment -> enrollment.getFinished() && 
+                         enrollment.getGrades().stream()
+                             .anyMatch(grade -> isPassingGrade(grade.getGrade())));
 
-        List<Course> courses = courseRepository.findCoursesNotEnrolledByStudentAndDepartment(
-            student.getStudentId(), 
-            currentSemester.getId(),
-            student.getDepartment().getId()
-        );
+            if (!hasCompleted) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-        log.debug("Found {} available courses", courses.size());
-
-        List<AvailableCourseResponse> availableCourses = courses.stream()
-                .map(course -> {
-                    Integer currentEnrollment = enrollmentRepository
-                            .countActiveByCourseIdAndSemesterId(course.getId(), currentSemester.getId());
-                    
-                    // Get the latest grade directly from Grade table
-                    List<Grade> grades = gradeRepository.findLatestGradeByStudentAndCourse(
-                        student.getStudentId(), 
-                        course.getId()
-                    );
-                    
-                    Boolean isFinished = !grades.isEmpty();
-                    String grade = null;
-                    String bobot = null;
-
-                    if (isFinished && !grades.isEmpty()) {
-                        Grade latestGrade = grades.get(0); // Get the most recent grade
-                        grade = latestGrade.getGrade();
-                        bobot = convertGradeToBobot(grade);
-                    }
-
-                    return AvailableCourseResponse.builder()
-                            .courseId(course.getId())
-                            .courseCode(course.getCourseCode())
-                            .courseName(course.getCourseName())
-                            .creditPoints(course.getCreditPoints())
-                            .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
-                            .lecturerName(course.getLecturer() != null ? 
-                                    course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
-                            .scheduleTime(course.getScheduleTime())
-                            .scheduleDay(course.getScheduleDay())
-                            .location(course.getLocation())
-                            .departmentId(course.getDepartment() != null ? course.getDepartment().getId() : null)
-                            .departmentName(course.getDepartment() != null ? course.getDepartment().getName() : "General Course")
-                            .maxStudents(course.getMaxStudents())
-                            .currentEnrollment(currentEnrollment)
-                            .isFull(currentEnrollment >= course.getMaxStudents())
-                            .isFinished(isFinished)
-                            .grade(grade)
-                            .bobot(bobot)
-                            .build();
-                })
-                .toList();
-
-        return AvailableCoursesWrapper.builder()
-                .data(availableCourses)
-                .build();
+    private boolean isPassingGrade(String grade) {
+        return grade.equals("A") || grade.equals("AB") || 
+               grade.equals("B") || grade.equals("BC") || 
+               grade.equals("C");
     }
 
     private String convertGradeToBobot(String grade) {
@@ -322,82 +374,73 @@ public class StudentDataService {
 
     @Transactional
     public EnrollmentResponse enrollCourse(String username, Integer courseId) {
-        // Get current student
-        Account account = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        try {
+            // Get current student
+            Account account = accountRepository.findByUsername(username)
+                    .orElseThrow(() -> {
+                        log.error("User not found: {}", username);
+                        return new RuntimeException("User not found");
+                    });
 
-        StudentProfile student = studentProfileRepository.findByAccount(account)
-                .orElseThrow(() -> new RuntimeException("Student profile not found"));
+            StudentProfile student = studentProfileRepository.findByAccount(account)
+                    .orElseThrow(() -> {
+                        log.error("Student profile not found for user: {}", username);
+                        return new RuntimeException("Student profile not found");
+                    });
 
-        // Get current semester
-        Semester currentSemester = semesterRepository
-                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
-                .orElseThrow(() -> new RuntimeException("Current semester not found"));
+            // Get current semester
+            Semester currentSemester = semesterRepository
+                    .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
+                    .orElseThrow(() -> {
+                        log.error("Current semester not found");
+                        return new RuntimeException("Current semester not found");
+                    });
 
-        // Get the course
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new RuntimeException("Course not found"));
+            // Check if course exists
+            Course course = courseRepository.findById(courseId)
+                    .orElseThrow(() -> {
+                        log.error("Course not found with ID: {}", courseId);
+                        return new RuntimeException("Course not found");
+                    });
 
-        // Check department access
-        if (course.getDepartment() != null && 
-            (student.getDepartment() == null || 
-             !student.getDepartment().getId().equals(course.getDepartment().getId()))) {
-            throw new RuntimeException("You cannot enroll in courses from other departments");
+            // Check if already enrolled
+            if (enrollmentRepository.hasActiveEnrollment(
+                    student.getStudentId(), courseId, currentSemester.getId())) {
+                log.warn("Student {} already enrolled in course {}", username, courseId);
+                return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.ALREADY_ENROLLED);
+            }
+
+            // Create new enrollment
+            Enrollment enrollment = new Enrollment();
+            enrollment.setStudent(student);
+            enrollment.setCourse(course);
+            enrollment.setSemester(currentSemester);
+            enrollment.setFinished(false);
+
+            // Save enrollment
+            enrollmentRepository.save(enrollment);
+            log.info("Successfully enrolled student {} in course {}", username, courseId);
+
+            // Create enrollment data
+            EnrollmentResponse.EnrollmentData enrollmentData = EnrollmentResponse.EnrollmentData.builder()
+                    .courseCode(course.getCourseCode())
+                    .courseName(course.getCourseName())
+                    .creditPoints(course.getCreditPoints())
+                    .semester(currentSemester.getName())
+                    .build();
+
+            return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.SUCCESS, enrollmentData);
+
+        } catch (RuntimeException e) {
+            log.error("Error during course enrollment: {}", e.getMessage());
+            if (e.getMessage().contains("not found")) {
+                return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.NOT_FOUND);
+            }
+            return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.INVALID_REQUEST);
+        } catch (Exception e) {
+            log.error("Unexpected error during course enrollment: {}", e.getMessage());
+            return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.SERVER_ERROR);
         }
-
-        // Check prerequisites
-        checkPrerequisites(student, course);
-
-        // Check if already enrolled
-        if (enrollmentRepository.existsByStudentStudentIdAndCourseIdAndSemesterId(
-                student.getStudentId(), courseId, currentSemester.getId())) {
-            throw new RuntimeException("Already enrolled in this course");
-        }
-
-        // Calculate current enrolled credits
-        int currentEnrolledCredits = enrollmentRepository
-                .findByStudentStudentIdAndSemesterId(student.getStudentId(), currentSemester.getId())
-                .stream()
-                .mapToInt(enrollment -> enrollment.getCourse().getCreditPoints())
-                .sum();
-
-        // Check if enrolling would exceed credit limit
-        if (currentEnrolledCredits + course.getCreditPoints() > student.getCreditLimit()) {
-            throw new RuntimeException("Enrolling in this course would exceed your credit limit");
-        }
-
-        // Add check for course capacity
-        Integer currentEnrollment = enrollmentRepository
-                .countByCourseIdAndSemesterId(courseId, currentSemester.getId());
-        
-        if (currentEnrollment >= course.getMaxStudents()) {
-            throw new RuntimeException("Course has reached maximum capacity");
-        }
-
-        // Create new enrollment
-        Enrollment enrollment = new Enrollment();
-        enrollment.setStudent(student);
-        enrollment.setCourse(course);
-        enrollment.setSemester(currentSemester);
-        enrollment.setFinished(false);
-        enrollmentRepository.save(enrollment);
-
-        // Calculate remaining credits
-        int remainingCredits = student.getCreditLimit() - (currentEnrolledCredits + course.getCreditPoints());
-
-        // Get lecturer name
-        String lecturerName = course.getLecturer() != null ? 
-                course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : 
-                null;
-
-        return EnrollmentResponse.builder()
-                .message("Successfully enrolled in course")
-                .courseCode(course.getCourseCode())
-                .courseName(course.getCourseName())
-                .creditPoints(course.getCreditPoints())
-                .remainingCredits(remainingCredits)
-                .lecturerName(lecturerName)
-                .build();
     }
 
     private void checkPrerequisites(StudentProfile student, Course course) {

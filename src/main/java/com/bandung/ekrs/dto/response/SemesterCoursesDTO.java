@@ -11,9 +11,8 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AvailableCoursesWrapper {
-    private List<SemesterCoursesDTO> semesterCourses;
-    private String message;
-    private int statusCode;
-    private String status;
+public class SemesterCoursesDTO {
+    private Integer semesterId;
+    private String semesterName;
+    private List<AvailableCourseResponse> courses;
 } 

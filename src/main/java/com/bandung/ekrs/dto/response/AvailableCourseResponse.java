@@ -29,4 +29,7 @@ public class AvailableCourseResponse {
     private Boolean isFinished;
     private String grade;
     private String bobot;
+    private Boolean prerequisitesMet;
+    private Integer semesterId;
+    private String semesterName;
 } 

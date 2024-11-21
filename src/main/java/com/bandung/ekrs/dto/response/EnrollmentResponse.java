@@ -10,10 +10,39 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EnrollmentResponse {
+    private String code;
     private String message;
-    private String courseCode;
-    private String courseName;
-    private Integer creditPoints;
-    private Integer remainingCredits;
-    private String lecturerName;
+    private int statusCode;
+    private String status;
+    private EnrollmentData data;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class EnrollmentData {
+        private String courseCode;
+        private String courseName;
+        private Integer creditPoints;
+        private String semester;
+    }
+
+    public static EnrollmentResponse fromStatus(EnrollmentStatusResponse statusResponse) {
+        return EnrollmentResponse.builder()
+                .code(statusResponse.getCode())
+                .message(statusResponse.getMessage())
+                .statusCode(statusResponse.getStatusCode())
+                .status(statusResponse.getStatus())
+                .build();
+    }
+
+    public static EnrollmentResponse fromStatus(EnrollmentStatusResponse statusResponse, EnrollmentData data) {
+        return EnrollmentResponse.builder()
+                .code(statusResponse.getCode())
+                .message(statusResponse.getMessage())
+                .statusCode(statusResponse.getStatusCode())
+                .status(statusResponse.getStatus())
+                .data(data)
+                .build();
+    }
 } 

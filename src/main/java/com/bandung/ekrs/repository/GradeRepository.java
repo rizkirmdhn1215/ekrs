@@ -36,4 +36,9 @@ public interface GradeRepository extends JpaRepository<Grade, Integer> {
            "WHERE g.enrollment.id = :enrollmentId " +
            "ORDER BY g.id DESC")
     Optional<Grade> findLatestGradeByEnrollmentId(@Param("enrollmentId") Integer enrollmentId);
+
+    Optional<Grade> findTopByEnrollmentStudentAndEnrollmentCourseOrderByCompletionDateDesc(
+        StudentProfile student, 
+        Course course
+    );
 } 

@@ -39,8 +39,6 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
     List<Course> findCoursesNotEnrolledByStudent(@Param("studentId") Integer studentId, 
                                                 @Param("semesterId") Integer semesterId);
     
-    // Add department-related queries
-    List<Course> findByDepartmentId(Integer departmentId);
     
 
     // Optional: Find courses by department and year
@@ -59,4 +57,25 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
             @Param("departmentId") Integer departmentId);
 
     List<Course> findByDepartmentIsNull();
+
+    @Query("SELECT c FROM Course c " +
+           "WHERE c.department.id = :departmentId " +
+           "AND c.semester.id = :semesterId")
+    List<Course> findByDepartmentAndSemester(
+        @Param("departmentId") Integer departmentId,
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT c FROM Course c " +
+           "WHERE c.department.id = :departmentId " +
+           "ORDER BY c.semester.id")
+    List<Course> findByDepartmentId(@Param("departmentId") Integer departmentId);
+
+    @Query("SELECT c FROM Course c " +
+           "WHERE c.department.id = :departmentId OR c.department IS NULL " +
+           "ORDER BY c.semester.id, c.courseCode")
+    List<Course> findByDepartmentIdOrGeneralCourses(@Param("departmentId") Integer departmentId);
+
+    // Alternative method name if you prefer using method naming convention
+    List<Course> findByDepartmentIdOrDepartmentIsNullOrderBySemesterIdAscCourseCodeAsc(Integer departmentId);
 } 

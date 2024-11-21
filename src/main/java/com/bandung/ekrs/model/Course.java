@@ -48,6 +48,10 @@ public class Course {
     @JoinColumn(name = "department_id")
     private Department department;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "semester_id")
+    private Semester semester;
+
     @Column(name = "max_students", nullable = false)
     private Integer maxStudents;
 } 
