@@ -7,9 +7,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalTime;
+import java.util.Arrays;
 
 @Entity
-@Table(name = "courses")
+@Table(name = "courses", indexes = {
+    @Index(name = "idx_courses_department_id", columnList = "department_id"),
+    @Index(name = "idx_courses_semester_id", columnList = "semester_id")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -53,5 +57,17 @@ public class Course {
     private Semester semester;
 
     @Column(name = "max_students", nullable = false)
-    private Integer maxStudents;
+    private Integer maxStudents = 30;
+
+    @PrePersist
+    @PreUpdate
+    private void validateScheduleDay() {
+        if (scheduleDay != null) {
+            String[] validDays = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+            boolean isValid = Arrays.asList(validDays).contains(scheduleDay);
+            if (!isValid) {
+                throw new IllegalArgumentException("Invalid schedule day");
+            }
+        }
+    }
 } 

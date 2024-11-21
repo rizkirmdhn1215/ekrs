@@ -1,6 +1,8 @@
 package com.bandung.ekrs.repository;
 
 import com.bandung.ekrs.model.Enrollment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -73,5 +75,42 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
 
     @Query("SELECT e FROM Enrollment e WHERE e.course.id = :courseId")
     List<Enrollment> findByCourseId(@Param("courseId") Integer courseId);
+
+    List<Enrollment> findByStudentStudentIdAndIsDeletedFalse(Integer studentId);
+
+    @Query("SELECT e FROM Enrollment e WHERE e.student.studentId = :studentId AND e.semester.id = :semesterId AND e.isDeleted = false")
+    List<Enrollment> findActiveNotDeletedByStudentStudentIdAndSemesterId(
+        @Param("studentId") Integer studentId,
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT e FROM Enrollment e " +
+           "LEFT JOIN FETCH e.course c " +
+           "LEFT JOIN FETCH e.student s " +
+           "LEFT JOIN FETCH e.semester sem " +
+           "WHERE s.studentId = :studentId " +
+           "AND e.isDeleted = false " +
+           "AND sem.id = :semesterId")
+    List<Enrollment> findActiveEnrollmentsWithDetails(
+            @Param("studentId") Integer studentId,
+            @Param("semesterId") Integer semesterId);
+
+    @Query("SELECT COUNT(e) FROM Enrollment e " +
+           "WHERE e.course.id = :courseId " +
+           "AND e.semester.id = :semesterId " +
+           "AND e.isDeleted = false")
+    Long countActiveEnrollments(
+            @Param("courseId") Integer courseId,
+            @Param("semesterId") Integer semesterId);
+
+    @Query("SELECT e FROM Enrollment e " +
+           "LEFT JOIN FETCH e.course " +
+           "LEFT JOIN FETCH e.student " +
+           "WHERE e.student.studentId = :studentId " +
+           "AND e.isDeleted = false " +
+           "ORDER BY e.semester.id DESC")
+    Page<Enrollment> findStudentEnrollmentsWithPagination(
+            @Param("studentId") Integer studentId,
+            Pageable pageable);
 
 } 

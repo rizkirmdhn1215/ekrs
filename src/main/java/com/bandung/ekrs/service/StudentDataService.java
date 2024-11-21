@@ -8,6 +8,9 @@ import com.bandung.ekrs.model.enums.AccountRole;
 import com.bandung.ekrs.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +42,19 @@ public class StudentDataService {
     private final PasswordEncoder passwordEncoder;
     private final KhsRepository khsRepository;
 
+    // Add a constant for default image
+    private static final String DEFAULT_IMAGE = "sukvi.jpeg";
+
+    private static final Map<String, String> GRADE_BOBOT = new HashMap<>() {{
+        put("A", "4.0");
+        put("AB", "3.5");
+        put("B", "3.0");
+        put("BC", "2.5");
+        put("C", "2.0");
+        put("D", "1.0");
+        put("E", "0.0");
+    }};
+
     public StudentDataResponse getCurrentStudentData(String username) {
         Account account = accountRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -46,46 +62,17 @@ public class StudentDataService {
         StudentProfile student = studentProfileRepository.findByAccount(account)
                 .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
-        // Get image URL (will return default image URL if no image exists)
-        String imageUrl;
-        if (student.getImageUrl() != null && !student.getImageUrl().isEmpty()) {
-            // Get presigned URL for existing image
-            imageUrl = minioService.getImageUrl(extractFileNameFromUrl(student.getImageUrl()));
-        } else {
-            // Get presigned URL for default image
-            imageUrl = minioService.getImageUrl("sukvi.jpeg");
-        }
-
-        // Calculate current semester based on enrollment year
+        String imageUrl = getStudentImageUrl(student);
         int currentSemester = calculateCurrentSemester(student.getEnrollmentYear());
+        Semester currentSemesterObj = getCurrentSemester();
         
-        // Get current semester from repository
-        Semester currentSemesterObj = semesterRepository
-                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
-                .orElseThrow(() -> new RuntimeException("Current semester not found"));
-
-        // Calculate total enrolled credits for current semester
-        int totalEnrolledCredits = enrollmentRepository
-                .findByStudentStudentIdAndSemesterId(student.getStudentId(), currentSemesterObj.getId())
-                .stream()
-                .mapToInt(enrollment -> enrollment.getCourse().getCreditPoints())
-                .sum();
-
-        // Calculate credits left (ensure it doesn't go below 0)
+        List<Enrollment> currentEnrollments = getCurrentEnrollments(
+            student.getStudentId(), 
+            currentSemesterObj.getId()
+        );
+        
+        int totalEnrolledCredits = calculateTotalEnrolledCredits(currentEnrollments);
         int creditLeft = Math.max(0, student.getCreditLimit() - totalEnrolledCredits);
-
-        // Build supervisor response if supervisor exists
-        SupervisorResponse supervisorResponse = null;
-        if (student.getSupervisor() != null) {
-            LecturerProfile supervisor = student.getSupervisor();
-            supervisorResponse = SupervisorResponse.builder()
-                    .lecturerId(supervisor.getLecturerId())
-                    .firstName(supervisor.getFirstName())
-                    .lastName(supervisor.getLastName())
-                    .departmentName(supervisor.getDepartment() != null ? 
-                            supervisor.getDepartment().getName() : null)
-                    .build();
-        }
 
         return StudentDataResponse.builder()
                 .firstName(student.getFirstName())
@@ -94,7 +81,7 @@ public class StudentDataService {
                 .enrollmentYear(student.getEnrollmentYear().toString())
                 .creditLimit(student.getCreditLimit())
                 .creditLeft(creditLeft)
-                .supervisor(supervisorResponse)
+                .supervisor(null)
                 .status(student.getStatus())
                 .address(student.getAddress())
                 .imageUrl(imageUrl)
@@ -136,12 +123,7 @@ public class StudentDataService {
                 .orElseThrow(() -> new RuntimeException("Student not found with NPM: " + npm));
 
         // Get image URL (will return default image URL if no image exists)
-        String imageUrl;
-        if (student.getImageUrl() != null && !student.getImageUrl().isEmpty()) {
-            imageUrl = minioService.getImageUrl(extractFileNameFromUrl(student.getImageUrl()));
-        } else {
-            imageUrl = minioService.getImageUrl("sukvi.jpeg");
-        }
+        String imageUrl = getStudentImageUrl(student);
 
         Semester currentSemester = semesterRepository
                 .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
@@ -354,22 +336,11 @@ public class StudentDataService {
     }
 
     private boolean isPassingGrade(String grade) {
-        return grade.equals("A") || grade.equals("AB") || 
-               grade.equals("B") || grade.equals("BC") || 
-               grade.equals("C");
+        return Arrays.asList("A", "AB", "B", "BC", "C").contains(grade);
     }
 
     private String convertGradeToBobot(String grade) {
-        return switch (grade) {
-            case "A" -> "4.0";
-            case "AB" -> "3.5";
-            case "B" -> "3.0";
-            case "BC" -> "2.5";
-            case "C" -> "2.0";
-            case "D" -> "1.0";
-            case "E" -> "0.0";
-            default -> "0.0";
-        };
+        return GRADE_BOBOT.getOrDefault(grade, "0.0");
     }
 
     @Transactional
@@ -643,96 +614,85 @@ public class StudentDataService {
         );
     }
 
-    public WeeklyScheduleResponse getWeeklySchedule(String username, int page, int size) {
-        Account account = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    public WeeklyScheduleResponse getWeeklySchedule(
+            String username, 
+            String search, 
+            String scheduleDay,
+            int page, 
+            int size) {
+        try {
+            StudentProfile student = getStudentProfile(username);
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // Validate scheduleDay if provided
+            if (scheduleDay != null) {
+                String[] validDays = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+                if (!Arrays.asList(validDays).contains(scheduleDay)) {
+                    return WeeklyScheduleResponse.builder()
+                        .message("Invalid schedule day")
+                        .statusCode(400)
+                        .status("BAD_REQUEST")
+                        .build();
+                }
+            }
 
-        StudentProfile student = studentProfileRepository.findByAccount(account)
-                .orElseThrow(() -> new RuntimeException("Student profile not found"));
+            Page<Course> coursePage = courseRepository.findCoursesWithFilters(
+                student.getDepartment().getId(),
+                getCurrentSemester().getId(),
+                search,
+                scheduleDay,
+                pageable
+            );
 
-        if (student.getDepartment() == null) {
-            throw new RuntimeException("Student is not assigned to any department");
-        }
-
-        // Get current semester
-        Semester currentSemester = semesterRepository
-                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
-                .orElseThrow(() -> new RuntimeException("Current semester not found"));
-
-        // Get all courses for department
-        List<Course> departmentCourses = courseRepository.findAll().stream()
-                .filter(course -> course.getDepartment() != null && 
-                        course.getDepartment().getId().equals(student.getDepartment().getId()))
-                .toList();
-
-        // Apply pagination
-        int start = page * size;
-        int end = Math.min(start + size, departmentCourses.size());
-        List<Course> paginatedCourses = start < departmentCourses.size() ? 
-                departmentCourses.subList(start, end) : 
-                new ArrayList<>();
-
-        // Map courses to response
-        List<CourseScheduleResponse> allSchedules = paginatedCourses.stream()
+            List<CourseScheduleWithSemesterResponse> schedules = coursePage.getContent().stream()
                 .map(course -> {
-                    // Get current enrollment for the course
-                    Integer currentEnrollment = enrollmentRepository
-                            .countByCourseIdAndSemesterId(course.getId(), currentSemester.getId());
+                    Long currentEnrolled = enrollmentRepository.countActiveEnrollments(
+                        course.getId(), 
+                        getCurrentSemester().getId()
+                    );
 
-                    // Get enrollment status and grade
-                    List<Enrollment> enrollments = enrollmentRepository.findByCourseId(course.getId());
-                    String status = "Belum Diambil";
-                    String grade = null;
-                    String bobot = null;
-                    
-                    if (!enrollments.isEmpty()) {
-                        Optional<Enrollment> latestEnrollment = enrollments.stream()
-                            .filter(e -> e.getStudent().getStudentId().equals(student.getStudentId()))
-                            .max(Comparator.comparing(Enrollment::getId));
-                        
-                        if (latestEnrollment.isPresent()) {
-                            Boolean finished = latestEnrollment.get().getFinished();
-                            status = finished != null && finished ? "Selesai" : "Sedang Diambil";
-                            
-                            // If course is finished, get the grade
-                            if (finished != null && finished) {
-                                Optional<Grade> latestGrade = gradeRepository
-                                    .findLatestGradeByEnrollmentId(latestEnrollment.get().getId());
-                                
-                                if (latestGrade.isPresent()) {
-                                    grade = latestGrade.get().getGrade();
-                                    bobot = convertGradeToBobot(grade);
-                                }
-                            }
-                        }
-                    }
-
-                    // Build lecturer name
-                    String lecturerName = course.getLecturer() != null ?
-                            course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() :
-                            null;
-
-                    return CourseScheduleResponse.builder()
-                            .courseId(course.getId())
-                            .courseCode(course.getCourseCode())
-                            .courseName(course.getCourseName())
-                            .creditPoints(course.getCreditPoints())
-                            .lecturerName(lecturerName)
-                            .scheduleTime(course.getScheduleTime())
-                            .scheduleDay(course.getScheduleDay())
-                            .location(course.getLocation())
-                            .maxStudents(course.getMaxStudents())
-                            .currentEnrollment(currentEnrollment)
-                            .status(status)
-                            .grade(grade)
-                            .bobot(bobot)
-                            .build();
+                    return CourseScheduleWithSemesterResponse.builder()
+                        .courseId(course.getId())
+                        .courseCode(course.getCourseCode())
+                        .courseName(course.getCourseName())
+                        .creditPoints(course.getCreditPoints())
+                        .scheduleDay(course.getScheduleDay())
+                        .scheduleTime(course.getScheduleTime() != null ? 
+                            course.getScheduleTime().toString() : null)
+                        .location(course.getLocation())
+                        .lecturerName(course.getLecturer() != null ? 
+                            course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
+                        .departmentName(course.getDepartment() != null ? 
+                            course.getDepartment().getName() : null)
+                        .maxStudents(course.getMaxStudents())
+                        .currentEnrolled(currentEnrolled.intValue())
+                        .semester(SemesterResponse.builder()
+                            .id(course.getSemester().getId())
+                            .name(course.getSemester().getName())
+                            .startDate(course.getSemester().getStartDate().toString())
+                            .endDate(course.getSemester().getEndDate().toString())
+                            .build())
+                        .build();
                 })
-                .toList();
+                .collect(Collectors.toList());
 
-        return WeeklyScheduleResponse.builder()
-                .schedule(allSchedules)
+            return WeeklyScheduleResponse.builder()
+                .courses(schedules)
+                .currentPage(coursePage.getNumber())
+                .totalPages(coursePage.getTotalPages())
+                .totalElements(coursePage.getTotalElements())
+                .message("Success")
+                .statusCode(200)
+                .status("OK")
                 .build();
+
+        } catch (Exception e) {
+            return WeeklyScheduleResponse.builder()
+                .message("Error: " + e.getMessage())
+                .statusCode(500)
+                .status("INTERNAL_SERVER_ERROR")
+                .build();
+        }
     }
 
     public EnrolledCoursesWrapper getEnrolledSchedule(String username) {
@@ -973,5 +933,39 @@ public class StudentDataService {
                 .status("INTERNAL_SERVER_ERROR")
                 .build();
         }
+    }
+
+    // Refactor image URL handling into a separate method
+    private String getStudentImageUrl(StudentProfile student) {
+        if (student.getImageUrl() != null && !student.getImageUrl().isEmpty()) {
+            return minioService.getImageUrl(extractFileNameFromUrl(student.getImageUrl()));
+        }
+        return minioService.getImageUrl(DEFAULT_IMAGE);
+    }
+
+    private List<Enrollment> getCurrentEnrollments(Integer studentId, Integer semesterId) {
+        return enrollmentRepository
+            .findActiveNotDeletedByStudentStudentIdAndSemesterId(studentId, semesterId);
+    }
+
+    private int calculateTotalEnrolledCredits(List<Enrollment> enrollments) {
+        return enrollments.stream()
+            .filter(e -> !e.getIsDeleted())
+            .mapToInt(enrollment -> enrollment.getCourse().getCreditPoints())
+            .sum();
+    }
+
+    private Semester getCurrentSemester() {
+        return semesterRepository
+            .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
+            .orElseThrow(() -> new RuntimeException("Current semester not found"));
+    }
+
+    private StudentProfile getStudentProfile(String username) {
+        Account account = accountRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        return studentProfileRepository.findByAccount(account)
+                .orElseThrow(() -> new RuntimeException("Student profile not found"));
     }
 } 

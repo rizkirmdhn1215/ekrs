@@ -11,8 +11,11 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WeeklyScheduleResponse {
-    private List<CourseScheduleResponse> schedule;
-    private Long totalItems;
-    private Integer totalPages;
-    private Integer currentPage;
+    private List<CourseScheduleWithSemesterResponse> courses;
+    private int currentPage;
+    private int totalPages;
+    private long totalElements;
+    private String message;
+    private int statusCode;
+    private String status;
 } 

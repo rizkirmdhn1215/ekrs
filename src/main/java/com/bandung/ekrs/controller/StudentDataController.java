@@ -338,7 +338,7 @@ public class StudentDataController {
     @GetMapping("/matakuliah/all")
     @Operation(
         summary = "Mendapatkan jadwal mingguan",
-        description = "Mengambil semua jadwal mata kuliah untuk jurusan mahasiswa dengan paginasi"
+        description = "Mengambil semua jadwal mata kuliah untuk jurusan mahasiswa dengan paginasi, pencarian, dan informasi semester"
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -357,9 +357,17 @@ public class StudentDataController {
     })
     public ResponseEntity<WeeklyScheduleResponse> getJadwalMingguan(
             Authentication authentication,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String scheduleDay,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(studentDataService.getWeeklySchedule(authentication.getName(), page, size));
+        return ResponseEntity.ok(studentDataService.getWeeklySchedule(
+            authentication.getName(), 
+            search,
+            scheduleDay,
+            page, 
+            size
+        ));
     }
 
     @GetMapping("/dashboard/jadwal")

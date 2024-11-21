@@ -9,7 +9,10 @@ import java.util.Set;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "enrollment")
+@Table(name = "enrollment", indexes = {
+    @Index(name = "idx_enrollment_student_id", columnList = "student_id"),
+    @Index(name = "idx_enrollment_course_id", columnList = "course_id")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -30,6 +33,9 @@ public class Enrollment {
     @ManyToOne
     @JoinColumn(name = "semester")
     private Semester semester;
+
+    @Column(name = "is_deleted")
+    private Boolean isDeleted = false;
 
     @Column(name = "finished")
     private Boolean finished = false;

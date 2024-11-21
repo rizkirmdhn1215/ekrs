@@ -10,4 +10,5 @@ import java.util.List;
 public interface CoursePrerequisiteRepository extends JpaRepository<CoursePrerequisite, CoursePrerequisiteId> {
     List<CoursePrerequisite> findByCourseId(Integer courseId);
     List<CoursePrerequisite> findByPrerequisiteCourseId(Integer prerequisiteCourseId);
+    List<CoursePrerequisite> findByConditionType(String conditionType);
 } 

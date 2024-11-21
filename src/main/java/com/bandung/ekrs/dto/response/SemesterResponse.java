@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SemesterResponse {
+    private Integer id;
     private String name;
     private String startDate;
     private String endDate;

@@ -11,4 +11,5 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Inte
     List<Announcement> findByCreatedById(Integer createdById);
     List<Announcement> findByTargetAudience(String targetAudience);
     List<Announcement> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
+    List<Announcement> findByTargetAudienceInIgnoreCase(List<String> audiences);
 } 
