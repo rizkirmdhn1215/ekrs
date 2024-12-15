@@ -171,4 +171,26 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
         @Param("semesterId") Integer semesterId,
         Pageable pageable
     );
+
+    @Query("SELECT c FROM Course c " +
+           "WHERE c.department.id = :departmentId " +
+           "AND (:search IS NULL OR " +
+           "CAST(c.courseCode AS string) LIKE CONCAT('%', CAST(:search AS string), '%') OR " +
+           "CAST(c.courseName AS string) LIKE CONCAT('%', CAST(:search AS string), '%')) " +
+           "AND c.semester.id = :semesterId")
+    List<Course> findAvailableCoursesWithFiltersNoPage(
+        @Param("departmentId") Integer departmentId,
+        @Param("search") String search,
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT c FROM Course c " +
+           "WHERE c.department.id = :departmentId " +
+           "AND (:search IS NULL OR " +
+           "CAST(c.courseCode AS string) LIKE CONCAT('%', CAST(:search AS string), '%') OR " +
+           "CAST(c.courseName AS string) LIKE CONCAT('%', CAST(:search AS string), '%'))")
+    List<Course> findAvailableCoursesWithFiltersNoPage(
+        @Param("departmentId") Integer departmentId,
+        @Param("search") String search
+    );
 } 

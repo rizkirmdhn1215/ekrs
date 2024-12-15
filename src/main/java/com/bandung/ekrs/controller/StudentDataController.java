@@ -211,52 +211,27 @@ public class StudentDataController {
     }
 
     @PostMapping(value = "/profile/foto-profil", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(
-        summary = "Perbarui foto profil",
-        description = "Memperbarui foto profil mahasiswa"
-    )
-    @ApiResponses(value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Berhasil memperbarui foto profil"
-        ),
-        @ApiResponse(
-            responseCode = "400",
-            description = "File foto tidak valid",
-            content = @Content
-        ),
-        @ApiResponse(
-            responseCode = "401",
-            description = "Tidak terautentikasi - Pengguna belum login",
-            content = @Content
-        ),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Profil mahasiswa tidak ditemukan",
-            content = @Content
-        )
-    })
     public ResponseEntity<String> perbaruiFotoProfil(
             Authentication authentication,
-            @RequestParam("image") MultipartFile image) {
+            @RequestParam("file") MultipartFile file) { // Changed from "image" to "file" to match frontend
         try {
-            if (image.isEmpty()) {
+            if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body("Silakan pilih file foto");
             }
 
-            String contentType = image.getContentType();
+            String contentType = file.getContentType();
             if (contentType == null || !contentType.startsWith("image/")) {
                 return ResponseEntity.badRequest().body("File harus berupa gambar");
             }
 
-            if (image.getSize() > 5 * 1024 * 1024) {
+            if (file.getSize() > 5 * 1024 * 1024) {
                 return ResponseEntity.badRequest().body("Ukuran file harus kurang dari 5MB");
             }
 
-            studentDataService.updateProfileImage(authentication.getName(), image);
-            return ResponseEntity.ok("Foto profil berhasil diperbarui");
+            studentDataService.updateProfileImage(authentication.getName(), file);
+            return ResponseEntity.ok().body("{\"message\": \"Foto profil berhasil diperbarui\"}"); // Return JSON response
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Gagal memperbarui foto profil: " + e.getMessage());
+            return ResponseEntity.badRequest().body("{\"message\": \"Gagal memperbarui foto profil: " + e.getMessage() + "\"}");
         }
     }
 

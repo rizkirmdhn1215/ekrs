@@ -50,7 +50,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
            "e.student.studentId = :studentId AND " +
            "e.course.id = :courseId AND " +
            "e.semester.id = :semesterId AND " +
-           "e.finished = false")
+           "e.finished = false AND " +
+           "e.isDeleted = false")
     boolean hasActiveEnrollment(
         @Param("studentId") Integer studentId,
         @Param("courseId") Integer courseId,
@@ -112,5 +113,24 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Integer>
     Page<Enrollment> findStudentEnrollmentsWithPagination(
             @Param("studentId") Integer studentId,
             Pageable pageable);
+
+    List<Enrollment> findByStudentStudentIdAndSemesterIdAndIsDeletedFalse(Integer studentId, Integer semesterId);
+
+    @Query("SELECT e FROM Enrollment e WHERE e.student.studentId = :studentId AND e.semester.id = :semesterId AND e.finished = false AND e.isDeleted = false")
+    List<Enrollment> findByStudentStudentIdAndSemesterIdAndFinishedFalseAndIsDeletedFalse(
+        @Param("studentId") Integer studentId, 
+        @Param("semesterId") Integer semesterId
+    );
+
+    @Query("SELECT e FROM Enrollment e WHERE e.student.studentId = :studentId")
+    List<Enrollment> findAllByStudentId(@Param("studentId") Integer studentId);
+
+    @Query("SELECT e FROM Enrollment e " +
+           "WHERE e.student.studentId = :studentId " +
+           "AND e.finished = false " +
+           "AND e.isDeleted = false")
+    List<Enrollment> findActiveEnrollmentsByStudentId(
+        @Param("studentId") Integer studentId
+    );
 
 } 

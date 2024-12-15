@@ -173,7 +173,7 @@ public class StudentDataService {
                 .creditLimit(student.getCreditLimit())
                 .creditLeft(creditLeft)
                 .supervisor(supervisorResponse)
-                .status(student.getStatus())
+                 .status(student.getStatus())
                 .address(student.getAddress())
                 .imageUrl(imageUrl)
                 .departmentId(student.getDepartment() != null ? student.getDepartment().getId() : null)
@@ -194,17 +194,50 @@ public class StudentDataService {
         StudentProfile student = studentProfileRepository.findByAccount(account)
                 .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
-        // Get only unfinished enrollments
-        List<EnrolledScheduleResponse> enrolledCourses = enrollmentRepository
-                .findByStudentStudentIdAndFinished(student.getStudentId(), false)
-                .stream()
+        // Calculate current semester based on enrollment year
+        int currentSemester = calculateCurrentSemester(student.getEnrollmentYear());
+        log.info("Student's current semester: {}", currentSemester);
+
+        // Log all enrollments for this student first
+        List<Enrollment> allEnrollments = enrollmentRepository.findAllByStudentId(student.getStudentId());
+        log.info("Total enrollments found for student: {}", allEnrollments.size());
+        
+        // Log details of each enrollment
+        allEnrollments.forEach(enrollment -> {
+            log.info("Enrollment ID: {}, Course: {}, Semester: {}, Finished: {}, IsDeleted: {}", 
+                enrollment.getId(),
+                enrollment.getCourse().getCourseName(),
+                enrollment.getSemester().getName(),
+                enrollment.getFinished(),
+                enrollment.getIsDeleted()
+            );
+        });
+
+        // Get active enrollments for the student's current semester
+        List<Enrollment> activeEnrollments = enrollmentRepository
+                .findByStudentStudentIdAndSemesterIdAndFinishedFalseAndIsDeletedFalse(
+                    student.getStudentId(), 
+                    currentSemester
+                );
+
+        log.info("Active enrollments found: {} for semester: {}", 
+            activeEnrollments.size(), 
+            currentSemester);
+
+        List<EnrolledScheduleResponse> enrolledCourses = activeEnrollments.stream()
                 .map(enrollment -> {
                     Course course = enrollment.getCourse();
                     Integer currentEnrollment = enrollmentRepository
                             .countActiveByCourseIdAndSemesterId(
                                 course.getId(), 
-                                enrollment.getSemester().getId()  // Use the enrollment's semester
+                                currentSemester
                             );
+
+                    log.info("Processing course: {}, Finished: {}, IsDeleted: {}", 
+                        course.getCourseName(),
+                        enrollment.getFinished(),
+                        enrollment.getIsDeleted()
+                    );
 
                     return EnrolledScheduleResponse.builder()
                             .courseId(course.getId())
@@ -225,6 +258,8 @@ public class StudentDataService {
                             .build();
                 })
                 .toList();
+
+        log.info("Final enrolled courses count: {}", enrolledCourses.size());
 
         return EnrolledCoursesWrapper.builder()
                 .data(enrolledCourses)
@@ -251,27 +286,25 @@ public class StudentDataService {
                 throw new RuntimeException("Student department not found");
             }
 
-            Pageable pageable = PageRequest.of(page, size);
-            Page<Course> coursePage;
-            
+            // Get all courses first to apply custom sorting
+            List<Course> allCourses;
             if (semesterId != null) {
-                coursePage = courseRepository.findAvailableCoursesWithFilters(
+                allCourses = courseRepository.findAvailableCoursesWithFiltersNoPage(
                     studentDepartment.getId(),
                     search,
-                    semesterId,
-                    pageable
+                    semesterId
                 );
             } else {
-                coursePage = courseRepository.findAvailableCoursesWithFilters(
+                allCourses = courseRepository.findAvailableCoursesWithFiltersNoPage(
                     studentDepartment.getId(),
-                    search,
-                    pageable
+                    search
                 );
             }
 
-            List<AvailableCourseResponse> courses = coursePage.getContent().stream()
+            // Convert to AvailableCourseResponse with grades
+            List<AvailableCourseResponse> courses = allCourses.stream()
                 .map(course -> {
-                    List<CoursePrerequisite> prerequisites = 
+                    List<CoursePrerequisite> prerequisites =
                         coursePrerequisiteRepository.findByCourseId(course.getId());
                     boolean prerequisitesMet = checkPrerequisites(student, prerequisites);
                     Integer currentEnrollment = enrollmentRepository.countActiveByCourseId(course.getId());
@@ -286,13 +319,13 @@ public class StudentDataService {
                         .courseName(course.getCourseName())
                         .creditPoints(course.getCreditPoints())
                         .lecturerId(course.getLecturer() != null ? course.getLecturer().getLecturerId() : null)
-                        .lecturerName(course.getLecturer() != null ? 
+                        .lecturerName(course.getLecturer() != null ?
                             course.getLecturer().getFirstName() + " " + course.getLecturer().getLastName() : null)
                         .scheduleTime(course.getScheduleTime())
                         .scheduleDay(course.getScheduleDay())
                         .location(course.getLocation())
                         .departmentId(course.getDepartment() != null ? course.getDepartment().getId() : null)
-                        .departmentName(course.getDepartment() != null ? 
+                        .departmentName(course.getDepartment() != null ?
                             course.getDepartment().getName() : "General Course")
                         .maxStudents(course.getMaxStudents())
                         .currentEnrollment(currentEnrollment)
@@ -305,12 +338,34 @@ public class StudentDataService {
                         .semesterName(course.getSemester().getName())
                         .build();
                 })
+                .sorted((c1, c2) -> {
+                    // Custom comparator for grade-based sorting
+                    String grade1 = c1.getGrade();
+                    String grade2 = c2.getGrade();
+                    
+                    // Null grades come first
+                    if (grade1 == null && grade2 == null) return 0;
+                    if (grade1 == null) return -1;
+                    if (grade2 == null) return 1;
+                    
+                    // Convert grades to numeric values for comparison
+                    double value1 = convertGradeToNumericValue(grade1);
+                    double value2 = convertGradeToNumericValue(grade2);
+                    
+                    // Sort by ascending grade value (lowest to highest)
+                    return Double.compare(value1, value2);
+                })
                 .collect(Collectors.toList());
+
+            // Apply pagination manually
+            int start = page * size;
+            int end = Math.min(start + size, courses.size());
+            List<AvailableCourseResponse> paginatedCourses = courses.subList(start, end);
 
             // If semesterId is provided, group by semester
             if (semesterId != null) {
                 Map<Integer, List<AvailableCourseResponse>> coursesBySemester = new TreeMap<>();
-                coursesBySemester.put(semesterId, courses);
+                coursesBySemester.put(semesterId, paginatedCourses);
                 
                 List<SemesterCoursesDTO> semesterCourses = coursesBySemester.entrySet().stream()
                     .map(entry -> SemesterCoursesDTO.builder()
@@ -322,20 +377,19 @@ public class StudentDataService {
 
                 return AvailableCoursesWrapper.builder()
                     .semesterCourses(semesterCourses)
-                    .currentPage(coursePage.getNumber())
-                    .totalPages(coursePage.getTotalPages())
-                    .totalElements(coursePage.getTotalElements())
+                    .currentPage(page)
+                    .totalPages((int) Math.ceil(courses.size() / (double) size))
+                    .totalElements((long) courses.size())
                     .message("Successfully retrieved available courses")
                     .statusCode(200)
                     .status("OK")
                     .build();
             } else {
-                // If no semesterId, return flat list of courses
                 return AvailableCoursesWrapper.builder()
-                    .courses(courses)  // Add this field to AvailableCoursesWrapper
-                    .currentPage(coursePage.getNumber())
-                    .totalPages(coursePage.getTotalPages())
-                    .totalElements(coursePage.getTotalElements())
+                    .courses(paginatedCourses)
+                    .currentPage(page)
+                    .totalPages((int) Math.ceil(courses.size() / (double) size))
+                    .totalElements((long) courses.size())
                     .message("Successfully retrieved available courses")
                     .statusCode(200)
                     .status("OK")
@@ -349,6 +403,20 @@ public class StudentDataService {
                 .status("INTERNAL_SERVER_ERROR")
                 .build();
         }
+    }
+
+    // Add helper method for grade conversion
+    private double convertGradeToNumericValue(String grade) {
+        return switch (grade) {
+            case "A" -> 4.0;
+            case "AB" -> 3.5;
+            case "B" -> 3.0;
+            case "BC" -> 2.5;
+            case "C" -> 2.0;
+            case "D" -> 1.0;
+            case "E" -> 0.0;
+            default -> -1.0; // For unknown grades
+        };
     }
 
     // Helper method to check prerequisites
@@ -398,12 +466,15 @@ public class StudentDataService {
                         return new RuntimeException("Student profile not found");
                     });
 
-            // Get current semester
-            Semester currentSemester = semesterRepository
-                    .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
+            // Calculate current semester based on enrollment year
+            int currentSemester = calculateCurrentSemester(student.getEnrollmentYear());
+            log.info("Student's current semester: {}", currentSemester);
+
+            // Get semester object for the current semester
+            Semester semester = semesterRepository.findById(currentSemester)
                     .orElseThrow(() -> {
-                        log.error("Current semester not found");
-                        return new RuntimeException("Current semester not found");
+                        log.error("Semester not found for semester number: {}", currentSemester);
+                        return new RuntimeException("Semester not found");
                     });
 
             // Check if course exists
@@ -415,7 +486,7 @@ public class StudentDataService {
 
             // Check if already enrolled
             if (enrollmentRepository.hasActiveEnrollment(
-                    student.getStudentId(), courseId, currentSemester.getId())) {
+                    student.getStudentId(), courseId, currentSemester)) {
                 log.warn("Student {} already enrolled in course {}", username, courseId);
                 return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.ALREADY_ENROLLED);
             }
@@ -424,19 +495,21 @@ public class StudentDataService {
             Enrollment enrollment = new Enrollment();
             enrollment.setStudent(student);
             enrollment.setCourse(course);
-            enrollment.setSemester(currentSemester);
+            enrollment.setSemester(semester);
             enrollment.setFinished(false);
+            enrollment.setIsDeleted(false);
 
             // Save enrollment
             enrollmentRepository.save(enrollment);
-            log.info("Successfully enrolled student {} in course {}", username, courseId);
+            log.info("Successfully enrolled student {} in course {} for semester {}", 
+                username, courseId, currentSemester);
 
             // Create enrollment data
             EnrollmentResponse.EnrollmentData enrollmentData = EnrollmentResponse.EnrollmentData.builder()
                     .courseCode(course.getCourseCode())
                     .courseName(course.getCourseName())
                     .creditPoints(course.getCreditPoints())
-                    .semester(currentSemester.getName())
+                    .semester(semester.getName())
                     .build();
 
             return EnrollmentResponse.fromStatus(EnrollmentStatusResponse.SUCCESS, enrollmentData);
@@ -514,50 +587,54 @@ public class StudentDataService {
 
     @Transactional
     public UnenrollmentResponse unenrollCourse(String username, Integer courseId) {
-        // Get current student
-        Account account = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        try {
+            // Get current student
+            Account account = accountRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        StudentProfile student = studentProfileRepository.findByAccount(account)
-                .orElseThrow(() -> new RuntimeException("Student profile not found"));
+            StudentProfile student = studentProfileRepository.findByAccount(account)
+                    .orElseThrow(() -> new RuntimeException("Student profile not found"));
 
-        // Get current semester
-        Semester currentSemester = semesterRepository
-                .findByStartDateBeforeAndEndDateAfter(LocalDate.now(), LocalDate.now())
-                .orElseThrow(() -> new RuntimeException("Current semester not found"));
-
-        // Find the enrollment
-        Enrollment enrollment = enrollmentRepository
-                .findByStudentStudentIdAndCourseIdAndSemesterId(
+            // Find the enrollment regardless of semester
+            Enrollment enrollment = enrollmentRepository.findByStudentStudentIdAndCourseId(
                     student.getStudentId(), 
-                    courseId, 
-                    currentSemester.getId()
+                    courseId
                 )
+                .stream()
+                .filter(e -> !e.getFinished() && !e.getIsDeleted())
+                .findFirst()
                 .orElseThrow(() -> new RuntimeException("Enrollment not found"));
 
-        Course course = enrollment.getCourse();
+            Course course = enrollment.getCourse();
 
-        // Calculate current enrolled credits before unenrollment
-        int currentEnrolledCredits = enrollmentRepository
-                .findByStudentStudentIdAndSemesterId(student.getStudentId(), currentSemester.getId())
-                .stream()
-                .mapToInt(e -> e.getCourse().getCreditPoints())
-                .sum();
+            // Calculate current enrolled credits before unenrollment
+            int currentEnrolledCredits = enrollmentRepository
+                    .findByStudentStudentIdAndSemesterIdAndFinishedFalseAndIsDeletedFalse(
+                        student.getStudentId(), 
+                        enrollment.getSemester().getId()
+                    )
+                    .stream()
+                    .mapToInt(e -> e.getCourse().getCreditPoints())
+                    .sum();
 
-        // Instead of deleting, mark as finished
-        enrollment.setFinished(true);
-        enrollmentRepository.save(enrollment);
+            // Mark as deleted instead of marking as finished
+            enrollment.setIsDeleted(true);
+            enrollmentRepository.save(enrollment);
 
-        // Calculate updated credit left
-        int updatedCreditLeft = student.getCreditLimit() - (currentEnrolledCredits - course.getCreditPoints());
+            // Calculate updated credit left
+            int updatedCreditLeft = student.getCreditLimit() - (currentEnrolledCredits - course.getCreditPoints());
 
-        return UnenrollmentResponse.builder()
-                .message("Successfully unenrolled from course")
-                .courseCode(course.getCourseCode())
-                .courseName(course.getCourseName())
-                .creditPoints(course.getCreditPoints())
-                .updatedCreditLeft(updatedCreditLeft)
-                .build();
+            return UnenrollmentResponse.builder()
+                    .message("Successfully unenrolled from course")
+                    .courseCode(course.getCourseCode())
+                    .courseName(course.getCourseName())
+                    .creditPoints(course.getCreditPoints())
+                    .updatedCreditLeft(updatedCreditLeft)
+                    .build();
+        } catch (Exception e) {
+            log.error("Error during course unenrollment: {}", e.getMessage());
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     @Transactional

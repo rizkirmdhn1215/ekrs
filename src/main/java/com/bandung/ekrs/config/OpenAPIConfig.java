@@ -20,15 +20,15 @@ import java.util.List;
 @Configuration
 public class OpenAPIConfig {
 
-    @Value("${server.port}")
-    private String serverPort;
+    @Value("${server.ip")
+    private String ServerIp;
 
     @Bean
     public OpenAPI openAPI() {
         List<Server> servers = new ArrayList<>();
         
         servers.add(new Server()
-            .url("http://10.10.20.13:" + serverPort)
+            .url(ServerIp)
             .description("Development Server"));
 
         SecurityScheme securityScheme = new SecurityScheme()

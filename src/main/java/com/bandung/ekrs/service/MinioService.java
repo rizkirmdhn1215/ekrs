@@ -26,6 +26,107 @@ public class MinioService {
     @Value("${minio.endpoint}")
     private String endpoint;
 
+    public String uploadFile(MultipartFile file, String fileName, String folder) {
+        try {
+            ensureBucketExists();
+
+            String objectName = folder + "/" + fileName;
+
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(objectName)
+                    .stream(file.getInputStream(), file.getSize(), -1)
+                    .contentType(file.getContentType())
+                    .build());
+
+            return getFileUrl(objectName);
+        } catch (Exception e) {
+            log.error("Error uploading file to MinIO: {}", e.getMessage());
+            throw new RuntimeException("Could not upload file to MinIO", e);
+        }
+    }
+
+    public String getFileUrl(String objectName) {
+        try {
+            if (!objectExists(objectName)) {
+                throw new RuntimeException("File not found: " + objectName);
+            }
+
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .expiry(7, TimeUnit.DAYS)
+                            .build());
+        } catch (Exception e) {
+            log.error("Error generating file URL: {}", e.getMessage());
+            throw new RuntimeException("Could not generate file URL", e);
+        }
+    }
+
+    public InputStream getFile(String objectName) {
+        try {
+            if (!objectExists(objectName)) {
+                throw new RuntimeException("File not found: " + objectName);
+            }
+
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("Error getting file from MinIO: {}", e.getMessage());
+            throw new RuntimeException("Could not get file from MinIO", e);
+        }
+    }
+
+    public void deleteFile(String objectName) {
+        try {
+            if (objectExists(objectName)) {
+                minioClient.removeObject(RemoveObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(objectName)
+                        .build());
+            }
+        } catch (Exception e) {
+            log.error("Error deleting file from MinIO: {}", e.getMessage());
+            throw new RuntimeException("Could not delete file from MinIO", e);
+        }
+    }
+
+    private boolean objectExists(String objectName) {
+        try {
+            minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+            );
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void ensureBucketExists() {
+        try {
+            boolean found = minioClient.bucketExists(BucketExistsArgs.builder()
+                    .bucket(bucketName)
+                    .build());
+            if (!found) {
+                minioClient.makeBucket(MakeBucketArgs.builder()
+                        .bucket(bucketName)
+                        .build());
+            }
+        } catch (Exception e) {
+            log.error("Error checking/creating bucket: {}", e.getMessage());
+            throw new RuntimeException("Could not ensure bucket exists", e);
+        }
+    }
+
     public String uploadImage(MultipartFile file, String fileName) {
         try {
             ensureBucketExists();
@@ -104,34 +205,4 @@ public class MinioService {
             throw new RuntimeException("Could not generate presigned URL", e);
         }
     }
-
-    private boolean objectExists(String fileName) {
-        try {
-            minioClient.statObject(
-                    StatObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(fileName)
-                            .build()
-            );
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private void ensureBucketExists() {
-        try {
-            boolean found = minioClient.bucketExists(BucketExistsArgs.builder()
-                    .bucket(bucketName)
-                    .build());
-            if (!found) {
-                minioClient.makeBucket(MakeBucketArgs.builder()
-                        .bucket(bucketName)
-                        .build());
-            }
-        } catch (Exception e) {
-            log.error("Error checking/creating bucket", e);
-            throw new RuntimeException("Could not ensure bucket exists", e);
-        }
-    }
-} 
+}
